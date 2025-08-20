@@ -461,7 +461,7 @@
       box-shadow: var(--shadow-lg);
       position: sticky;
       top: 24px;
-      max-height: calc(100vh - 48px);
+      max-height: calc(100vh - 120px);
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -554,12 +554,18 @@
     }
 
     .quote-items-wrapper {
-      padding: 24px 28px;
-      border-bottom: 1px solid var(--gray-200);
       flex: 1;
       min-height: 0;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
+    }
+
+    .quote-items {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 24px 28px;
     }
 
     .quote-item {
@@ -626,6 +632,7 @@
       background: var(--gray-50);
       padding: 24px 28px;
       flex-shrink: 0;
+      border-top: 1px solid var(--gray-200);
     }
 
     .total-line {
