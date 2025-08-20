@@ -662,6 +662,75 @@
       opacity: 0.5;
     }
 
+    /* Invoice Section */
+    .invoice-section {
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--gray-200);
+      text-align: center;
+    }
+
+    .btn-invoice {
+      width: 100%;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      color: white;
+      border: none;
+      border-radius: var(--radius);
+      padding: 16px 24px;
+      font-weight: 600;
+      font-size: 15px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-invoice:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .btn-invoice:active {
+      transform: translateY(0);
+    }
+
+    .btn-invoice:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-invoice::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+      transition: left 0.5s;
+    }
+
+    .btn-invoice:hover::before {
+      left: 100%;
+    }
+
+    .btn-icon {
+      font-size: 16px;
+    }
+
+    .invoice-note {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 8px;
+      font-weight: 500;
+    }
+
     /* Responsive Design */
     @media (max-width: 1200px) {
       .layout {
@@ -828,6 +897,14 @@
           <div class="total-line">
             <span>Total Quote</span>
             <span id="totalAmount">$0.00</span>
+          </div>
+          
+          <div id="invoiceSection" class="invoice-section" style="display: none;">
+            <button id="createInvoiceBtn" class="btn-invoice" onclick="createInvoice()">
+              <span class="btn-icon">📄</span>
+              Create Invoice
+            </button>
+            <p class="invoice-note">Generate a professional invoice for this quote</p>
           </div>
         </div>
       </div>
@@ -1077,6 +1154,10 @@
       totalEl.textContent = `$${total.toFixed(2)}`;
 
       taxAmount = calculatedTax;
+
+      // Show/hide invoice section based on quote content
+      const invoiceSection = document.getElementById('invoiceSection');
+      invoiceSection.style.display = quote.length > 0 ? 'block' : 'none';
     }
 
     function removeFromQuote(productId) {
@@ -1131,6 +1212,74 @@
         taxResult.textContent = 'Tax calculation failed';
         taxRate = 0;
         updateQuoteDisplay();
+      }
+    }
+
+    // Invoice Creation
+    async function createInvoice() {
+      if (quote.length === 0) {
+        showError('Please add items to your quote first');
+        return;
+      }
+
+      const customerEmail = document.getElementById('toolbarEmail').value.trim();
+      if (!customerEmail) {
+        showError('Please enter a customer email address');
+        return;
+      }
+
+      const btn = document.getElementById('createInvoiceBtn');
+      const originalText = btn.innerHTML;
+      
+      try {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="btn-icon">⏳</span> Creating Invoice...';
+
+        // Prepare invoice data
+        const invoiceData = {
+          customerInfo: {
+            email: customerEmail,
+            name: customerEmail.split('@')[0] // Simple name extraction
+          },
+          products: quote.map(item => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice
+          })),
+          shippingAddress: {
+            line1: '123 Business St', // Placeholder - in real implementation, collect this
+            city: 'Business City',
+            state: 'CA',
+            postal_code: document.getElementById('zipCode').value || '90210',
+            country: 'US'
+          }
+        };
+
+        const response = await fetch('/api/create-checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(invoiceData)
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          showError(`Invoice creation failed: ${data.error}`);
+        } else if (data.url) {
+          showStatus('Invoice created successfully! Redirecting to payment...');
+          setTimeout(() => {
+            window.open(data.url, '_blank');
+          }, 1000);
+        } else {
+          showError('Unexpected response from server');
+        }
+
+      } catch (error) {
+        console.error('Invoice creation failed:', error);
+        showError('Failed to create invoice. Please try again.');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
       }
     }
   </script>
