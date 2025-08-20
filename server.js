@@ -3,7 +3,14 @@ require('dotenv').config();
 console.log('STRIPE_SECRET_KEY:', process.env.STRIPE_SECRET_KEY);
 const express = require('express');
 const app = express();
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || '');
+
+// Initialize Stripe only if we have a valid API key
+let stripe = null;
+if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY.trim() !== '') {
+  stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+} else {
+  console.warn('⚠️  STRIPE_SECRET_KEY not found or empty. Stripe features will be disabled.');
+}
 
 const CONFIG = {
   AWS_BUCKET_URL: process.env.AWS_BUCKET_URL || 'https://leadprocessor.s3.us-east-2.amazonaws.com',
@@ -464,7 +471,7 @@ app.post('/api/calculate-price', (req, res) => {
 /* Tax calculation endpoint */
 app.post('/api/calculate-tax', async (req, res) => {
   try {
-    if (!CONFIG.STRIPE_SECRET_KEY) {
+    if (!stripe) {
       return res.status(500).json({ error: 'Missing STRIPE_SECRET_KEY' });
     }
 
@@ -514,7 +521,7 @@ app.post('/api/calculate-tax', async (req, res) => {
 /* Stripe Checkout with Stripe Tax + shipping */
 app.post('/api/create-checkout', async (req, res) => {
   try {
-    if (!CONFIG.STRIPE_SECRET_KEY) {
+    if (!stripe) {
       return res.status(500).json({ error: 'Missing STRIPE_SECRET_KEY in .env' });
     }
 
