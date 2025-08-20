@@ -460,7 +460,10 @@
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow-lg);
       position: sticky;
-      top: 104px;
+      top: 24px;
+      max-height: calc(100vh - 48px);
+      display: flex;
+      flex-direction: column;
       overflow: hidden;
     }
 
@@ -486,6 +489,7 @@
     .quote-section {
       padding: 24px 28px;
       border-bottom: 1px solid var(--gray-200);
+      flex-shrink: 0;
     }
 
     .quote-section:last-child {
@@ -543,8 +547,19 @@
 
     /* Quote Items */
     .quote-items {
-      max-height: 300px;
+      flex: 1;
+      min-height: 0;
       overflow-y: auto;
+      padding: 0 28px;
+    }
+
+    .quote-items-wrapper {
+      padding: 24px 28px;
+      border-bottom: 1px solid var(--gray-200);
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
     }
 
     .quote-item {
@@ -610,6 +625,7 @@
     .quote-totals {
       background: var(--gray-50);
       padding: 24px 28px;
+      flex-shrink: 0;
     }
 
     .total-line {
@@ -785,6 +801,9 @@
 
         <div class="quote-section">
           <h3>Quote Items</h3>
+        </div>
+
+        <div class="quote-items-wrapper">
           <div id="quoteItems" class="quote-items">
             <div class="empty-quote">
               <div class="empty-quote-icon">📋</div>
