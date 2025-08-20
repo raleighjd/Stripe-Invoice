@@ -2,7 +2,6 @@
 require('dotenv').config();
 const express = require('express');
 const app = express();
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || '');
 
 const CONFIG = {
   AWS_BUCKET_URL: process.env.AWS_BUCKET_URL || 'https://leadprocessor.s3.amazonaws.com',
@@ -13,6 +12,12 @@ const CONFIG = {
     .split(',')
     .map(s => s.trim().toUpperCase())
 };
+
+// Initialize Stripe only if we have a valid key
+let stripe = null;
+if (CONFIG.STRIPE_SECRET_KEY) {
+  stripe = require('stripe')(CONFIG.STRIPE_SECRET_KEY);
+}
 
 /* ---------------------------------
    Product Catalog (20 items)
@@ -459,8 +464,8 @@ app.post('/api/calculate-price', (req, res) => {
 /* Stripe Checkout with Stripe Tax + shipping */
 app.post('/api/create-checkout', async (req, res) => {
   try {
-    if (!CONFIG.STRIPE_SECRET_KEY) {
-      return res.status(500).json({ error: 'Missing STRIPE_SECRET_KEY in .env' });
+    if (!stripe) {
+      return res.status(500).json({ error: 'Stripe not configured. Please set STRIPE_SECRET_KEY in .env file.' });
     }
 
     const { customerInfo, products: cart, shippingAddress, billingAddress } = req.body || {};
