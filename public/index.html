@@ -3,283 +3,793 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Quote & Checkout</title>
+  <title>Corporate Apparel Quote Tool</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    :root{
-      --bg: #F6F7FB;
-      --surface: #FFFFFF;
-      --text: #0F172A;         /* slate-900 */
-      --muted: #475569;        /* slate-600 */
-      --line: #E5E7EB;         /* gray-200 */
-      --primary: #1E3A8A;      /* indigo-900 */
-      --primary-600: #2E49A6;  /* hover */
-      --accent: #0EA5E9;       /* cyan-500 (sparingly) */
-      --success: #15803D;      /* green-700 */
-      --danger: #B91C1C;       /* red-700 */
+    :root {
+      /* Professional B2B Color Palette */
+      --primary: #1a365d;        /* Deep navy blue */
+      --primary-light: #2d5a87;  /* Lighter navy */
+      --primary-dark: #0f2a44;   /* Darker navy */
+      --accent: #e53e3e;         /* Professional red accent */
+      --accent-light: #fc8181;   /* Light red */
+      --accent-dark: #c53030;    /* Dark red */
+      
+      /* Neutral Grays */
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-400: #9ca3af;
+      --gray-500: #6b7280;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
+      
+      /* Surface Colors */
+      --bg: #fafbfc;
+      --surface: #ffffff;
+      --surface-elevated: #ffffff;
+      
+      /* Typography */
+      --text-primary: var(--gray-900);
+      --text-secondary: var(--gray-600);
+      --text-muted: var(--gray-500);
+      
+      /* Spacing & Layout */
       --radius: 12px;
-      --radius-sm: 8px;
-      --shadow: 0 10px 30px rgba(2,8,23,0.06);
+      --radius-lg: 16px;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+      --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
     }
 
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0;
-      font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,Arial,sans-serif;
-      color:var(--text);
-      background:var(--bg);
-      -webkit-font-smoothing:antialiased;
-      -moz-osx-font-smoothing:grayscale;
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
 
-    .wrap{max-width:1280px;margin:0 auto;padding:32px}
+    html, body {
+      height: 100%;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text-primary);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
 
-    /* Top Bar */
-    .topbar{
-      display:flex;align-items:center;justify-content:space-between;
-      margin-bottom:24px;
+    /* Header */
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--gray-200);
+      box-shadow: var(--shadow-sm);
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
-    .brand{
-      display:flex;align-items:center;gap:14px;
-    }
-    .logo{
-      width:40px;height:40px;border-radius:8px;background:var(--primary);
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
-    }
-    .brand h1{
-      margin:0;font-size:18px;letter-spacing:.2px;font-weight:700;color:var(--text);
-    }
-    .bar{
-      display:flex;gap:10px;align-items:center;
-    }
-    .bar input{
-      height:40px;min-width:280px;padding:0 12px;border-radius:8px;border:1px solid var(--line);
-      background:#fff;color:var(--text);
-    }
-    .btn{
-      height:40px;padding:0 16px;border-radius:8px;border:1px solid var(--line);
-      background:#fff;color:var(--primary);font-weight:600;cursor:pointer;
-    }
-    .btn:hover{border-color:#D1D5DB}
 
-    /* Layout (Amazon-like narrow checkout) */
-    .panel{
-      background:var(--surface);
-      border:1px solid var(--line);
-      border-radius:var(--radius);
-      box-shadow:var(--shadow);
-      min-width: 0;              /* NEW: prevents grid overflow */
+    .header-content {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 72px;
     }
-    .grid{
-      display:grid;
-      grid-template-columns: minmax(0, 1fr) 360px; /* <— catalog expands, checkout fixed ~Amazon width */
-      gap:24px;
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .logo {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 800;
+      font-size: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .brand-text h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 2px;
+    }
+
+    .brand-text p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .email-input {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      min-width: 320px;
+    }
+
+    .email-input input {
+      border: none;
+      background: none;
+      outline: none;
+      font-size: 14px;
+      color: var(--text-primary);
+      flex: 1;
+      font-weight: 500;
+    }
+
+    .email-input input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: var(--radius);
+      padding: 12px 20px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-dark);
+      box-shadow: var(--shadow);
+      transform: translateY(-1px);
+    }
+
+    /* Main Layout */
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 32px 24px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 32px;
       align-items: start;
     }
 
-    /* Section headers */
-    .section-h{
-      padding:18px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;
+    /* Status Messages */
+    .status-bar {
+      margin-bottom: 24px;
     }
-    .section-h h2{margin:0;font-size:16px;font-weight:800;letter-spacing:.2px}
 
-    /* Products */
-    .products{
-      padding:18px 18px 6px 18px;
-      display:grid;gap:18px;
-      grid-template-columns:repeat(3,minmax(0,1fr));
+    .alert {
+      padding: 16px 20px;
+      border-radius: var(--radius);
+      font-weight: 500;
+      font-size: 14px;
+      display: none;
     }
-    .card{
-      border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff;
-      display:flex;flex-direction:column;
-      transition: box-shadow .2s ease, transform .2s ease;
-    }
-    .card:hover{box-shadow:0 10px 20px rgba(2,8,23,0.08);transform:translateY(-1px)}
-    .thumb{
-      height:180px;background:#F2F3F7;border-bottom:1px solid var(--line);
-      background-size:contain;background-repeat:no-repeat;background-position:center;
-      display:flex;align-items:center;justify-content:center;color:#94A3B8;font-size:12px;
-    }
-    .card-body{padding:14px 14px 16px}
-    .name{font-size:14px;font-weight:700;margin-bottom:6px}
-    .sku{font-size:12px;color:#64748B;margin-bottom:10px}
-    .desc{font-size:13px;color:#475569;line-height:1.4;margin-bottom:12px}
 
-    .tiers{
-      background:#F8FAFC;border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:12px;
+    .alert.success {
+      background: #f0fdf4;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+      display: block;
     }
-    .tier{
-      display:flex;justify-content:space-between;align-items:center;
-      font-size:12px;padding:6px 8px;border-radius:6px;
-    }
-    .tier.active{background:#EEF2FF;color:#111827}
 
-    .qty{
-      display:flex;align-items:center;gap:8px;margin-bottom:10px;
+    .alert.error {
+      background: #fef2f2;
+      color: #dc2626;
+      border: 1px solid #fecaca;
+      display: block;
     }
-    .qty input{width:80px;height:38px;border:1px solid var(--line);border-radius:8px;padding:0 8px}
-    .qty .qbtn{
-      width:38px;height:38px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font-weight:700
-    }
-    .price{font-size:14px;font-weight:800;color:var(--primary);margin-bottom:8px}
-    .save{display:inline-block;font-size:12px;color:var(--success);margin-bottom:10px}
 
-    .add{
-      height:40px;border-radius:8px;border:1px solid var(--primary);
-      background:var(--primary);color:#fff;font-weight:700;cursor:pointer;
+    /* Product Catalog */
+    .catalog {
+      background: var(--surface);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      overflow: hidden;
     }
-    .add:hover{background:var(--primary-600);border-color:var(--primary-600)}
 
-    /* Sidebar / Checkout */
-    .side{display:flex;flex-direction:column;position:sticky;top:24px}
-    .block{padding:16px;border-bottom:1px solid var(--line)}
-    .block:last-child{border-bottom:none}
-    .label{font-size:12px;color:#64748B;margin-bottom:6px;font-weight:600}
-    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    .row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
-    .input, .select{
-      height:40px;
-      border:1px solid var(--line);
-      border-radius:8px;
-      padding:0 10px;
-      font-size:14px;
-      background:#fff;
-      width: 100%;               /* NEW: fill grid cell, don’t overflow */
-      max-width: 100%;           /* NEW: belt-and-suspenders */
+    .section-header {
+      padding: 24px 28px;
+      border-bottom: 1px solid var(--gray-200);
+      background: var(--gray-50);
     }
-    .check{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:13px;color:var(--muted)}
 
-    /* Cart list */
-    .cart{padding:14px}
-    .cart-item{
-      border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;background:#fff
+    .section-header h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 4px;
     }
-    .cart-name{font-weight:700;font-size:13px;margin-bottom:4px}
-    .cart-meta{font-size:12px;color:#64748B}
-    .rm{border:1px solid #E11D48;background:#fff;color:#E11D48;border-radius:8px;height:32px;padding:0 10px;cursor:pointer}
-    .rm:hover{background:#FEF2F2}
 
-    .totals{border-top:1px solid var(--line);padding-top:12px;margin-top:14px}
-    .line{display:flex;justify-content:space-between;font-size:13px;margin:6px 0}
-    .grand{font-weight:900;font-size:15px;color:var(--text);border-top:1px solid var(--line);padding-top:10px;margin-top:8px}
+    .section-header p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
 
-    .primary{
-      margin-top:12px;height:44px;border:none;border-radius:10px;background:var(--primary);
-      color:#fff;font-weight:800;cursor:pointer
+    .products-grid {
+      padding: 28px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
     }
-    .primary:hover{background:var(--primary-600)}
-    .muted{font-size:12px;color:#64748B;line-height:1.4;margin-top:8px}
 
-    /* Responsive */
-    @media (max-width: 1100px){
-      .products{grid-template-columns:repeat(2,minmax(0,1fr))}
+    /* Product Cards */
+    .product-card {
+      background: var(--surface);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      transition: all 0.3s ease;
+      position: relative;
     }
-    @media (max-width: 920px){
-      .grid{grid-template-columns:1fr}
-      .side{position:static}
-      .products{grid-template-columns:repeat(2,minmax(0,1fr))}
+
+    .product-card:hover {
+      box-shadow: var(--shadow-xl);
+      transform: translateY(-4px);
+      border-color: var(--gray-300);
     }
-    @media (max-width: 640px){
-      .products{grid-template-columns:1fr}
-      .bar input{min-width:200px}
+
+    .product-image {
+      height: 280px;
+      background: linear-gradient(135deg, var(--gray-100) 0%, var(--gray-50) 100%);
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 14px;
+      font-weight: 500;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .product-image::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(45deg, transparent 49%, rgba(255,255,255,0.1) 50%, transparent 51%);
+      animation: shimmer 2s infinite;
+    }
+
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+
+    .product-content {
+      padding: 24px;
+    }
+
+    .product-header {
+      margin-bottom: 16px;
+    }
+
+    .product-name {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+      line-height: 1.3;
+    }
+
+    .product-sku {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .product-description {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+
+    /* Pricing Tiers */
+    .pricing-tiers {
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .pricing-tier {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .pricing-tier.active {
+      background: var(--accent);
+      color: white;
+      font-weight: 600;
+    }
+
+    .pricing-tier:not(.active):hover {
+      background: var(--gray-100);
+    }
+
+    /* Quantity Controls */
+    .quantity-section {
+      margin-bottom: 20px;
+    }
+
+    .quantity-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .quantity-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .qty-btn {
+      width: 40px;
+      height: 40px;
+      border: 1px solid var(--gray-300);
+      background: var(--surface);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--text-primary);
+      transition: all 0.2s ease;
+    }
+
+    .qty-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--gray-50);
+    }
+
+    .qty-input {
+      width: 80px;
+      height: 40px;
+      border: 1px solid var(--gray-300);
+      border-radius: 8px;
+      text-align: center;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      background: var(--surface);
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .qty-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(229, 62, 62, 0.1);
+    }
+
+    /* Product Pricing Display */
+    .product-pricing {
+      margin-bottom: 16px;
+    }
+
+    .current-price {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+
+    .price-breakdown {
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .savings {
+      font-size: 13px;
+      color: #059669;
+      font-weight: 600;
+      margin-top: 4px;
+    }
+
+    /* Quote Sidebar */
+    .quote-sidebar {
+      background: var(--surface);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      position: sticky;
+      top: 104px;
+      overflow: hidden;
+    }
+
+    .quote-header {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      color: white;
+      padding: 24px 28px;
+      text-align: center;
+    }
+
+    .quote-header h2 {
+      font-size: 24px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .quote-header p {
+      font-size: 14px;
+      opacity: 0.9;
+      font-weight: 500;
+    }
+
+    .quote-section {
+      padding: 24px 28px;
+      border-bottom: 1px solid var(--gray-200);
+    }
+
+    .quote-section:last-child {
+      border-bottom: none;
+    }
+
+    .quote-section h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 16px;
+    }
+
+    /* Tax Calculator */
+    .tax-calculator {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .zip-input {
+      flex: 1;
+      height: 44px;
+      border: 1px solid var(--gray-300);
+      border-radius: var(--radius);
+      padding: 0 16px;
+      font-size: 14px;
+      font-weight: 500;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .zip-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(229, 62, 62, 0.1);
+    }
+
+    .btn-secondary {
+      background: var(--gray-100);
+      color: var(--text-primary);
+      border: 1px solid var(--gray-300);
+      border-radius: var(--radius);
+      padding: 0 16px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .btn-secondary:hover {
+      background: var(--gray-200);
+      border-color: var(--gray-400);
+    }
+
+    /* Quote Items */
+    .quote-items {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .quote-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--gray-100);
+    }
+
+    .quote-item:last-child {
+      border-bottom: none;
+    }
+
+    .item-details h4 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .item-meta {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .item-price {
+      text-align: right;
+    }
+
+    .item-total {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .item-unit {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .remove-btn {
+      background: none;
+      border: 1px solid var(--accent-light);
+      color: var(--accent);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 4px;
+      transition: all 0.2s ease;
+    }
+
+    .remove-btn:hover {
+      background: var(--accent);
+      color: white;
+    }
+
+    /* Quote Totals */
+    .quote-totals {
+      background: var(--gray-50);
+      padding: 24px 28px;
+    }
+
+    .total-line {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .total-line:last-child {
+      margin-bottom: 0;
+      padding-top: 16px;
+      border-top: 2px solid var(--gray-200);
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+
+    .total-value {
+      font-weight: 600;
+    }
+
+    .empty-quote {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+    }
+
+    .empty-quote-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 1200px) {
+      .layout {
+        grid-template-columns: 1fr 340px;
+        gap: 24px;
+      }
+      
+      .products-grid {
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 20px;
+      }
+    }
+
+    @media (max-width: 968px) {
+      .layout {
+        grid-template-columns: 1fr;
+        gap: 24px;
+      }
+      
+      .quote-sidebar {
+        position: static;
+        order: -1;
+      }
+      
+      .products-grid {
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      .container {
+        padding: 20px 16px;
+      }
+      
+      .header-content {
+        padding: 0 16px;
+        flex-direction: column;
+        height: auto;
+        padding-top: 16px;
+        padding-bottom: 16px;
+        gap: 16px;
+      }
+      
+      .email-input {
+        min-width: 280px;
+      }
+      
+      .products-grid {
+        grid-template-columns: 1fr;
+        padding: 20px;
+        gap: 20px;
+      }
+      
+      .product-image {
+        height: 240px;
+      }
+    }
+
+    /* Loading States */
+    .loading {
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    .loading::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 20px;
+      height: 20px;
+      margin: -10px 0 0 -10px;
+      border: 2px solid var(--gray-300);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <!-- Top Bar -->
-    <div class="topbar">
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
       <div class="brand">
-        <div class="logo" aria-hidden="true"></div>
-        <h1>Quote & Checkout</h1>
+        <div class="logo">CA</div>
+        <div class="brand-text">
+          <h1>Corporate Apparel</h1>
+          <p>Professional Quote Tool</p>
+        </div>
       </div>
-      <div class="bar">
-        <input id="toolbarEmail" type="email" placeholder="Customer email for branded mockups"/>
-        <button class="btn" onclick="reloadWithEmail()">Load mockups</button>
+      <div class="header-actions">
+        <div class="email-input">
+          <input id="toolbarEmail" type="email" placeholder="Enter customer email for branded mockups"/>
+          <button class="btn-primary" onclick="reloadWithEmail()">Load Mockups</button>
+        </div>
       </div>
     </div>
+  </header>
 
-    <!-- Status -->
-    <div id="statusMsg" class="msg"></div>
-    <div id="errorMsg" class="msg"></div>
+  <!-- Main Content -->
+  <div class="container">
+    <!-- Status Messages -->
+    <div class="status-bar">
+      <div id="statusMsg" class="alert success"></div>
+      <div id="errorMsg" class="alert error"></div>
+    </div>
 
-    <!-- Main -->
-    <div class="grid">
-      <!-- Catalog -->
-      <div class="panel">
-        <div class="section-h"><h2>Catalog</h2></div>
-        <div id="productGrid" class="products"></div>
+    <div class="layout">
+      <!-- Product Catalog -->
+      <div class="catalog">
+        <div class="section-header">
+          <h2>Corporate Apparel Catalog</h2>
+          <p>Professional branded apparel with volume pricing. Minimum order: 24 pieces per item.</p>
+        </div>
+        <div id="productGrid" class="products-grid"></div>
       </div>
 
-      <!-- Sidebar -->
-      <div class="panel side">
-        <div class="section-h"><h2>Checkout Details DOGfhgdfg</h2></div>
-
-        <div class="block">
-          <div class="label">Customer</div>
-          <div class="row">
-            <input id="customerName" class="input" placeholder="Full name *"/>
-            <input id="customerCompany" class="input" placeholder="Company"/>
-          </div>
-          <div class="row" style="margin-top:10px;">
-            <input id="customerEmail" class="input" placeholder="Email *" onblur="mirrorEmail()"/>
-            <input id="customerPhone" class="input" placeholder="Phone"/>
-          </div>
+      <!-- Quote Sidebar -->
+      <div class="quote-sidebar">
+        <div class="quote-header">
+          <h2>Your Quote</h2>
+          <p>Instant pricing with volume discounts</p>
         </div>
 
-        <div class="block">
-          <div class="label">Shipping Address *</div>
-          <div class="row">
-            <input id="ship_line1" class="input" placeholder="Address line 1"/>
-            <input id="ship_line2" class="input" placeholder="Address line 2 (optional)"/>
+        <div class="quote-section">
+          <h3>Tax Calculator</h3>
+          <div class="tax-calculator">
+            <input id="zipCode" class="zip-input" type="text" placeholder="ZIP code" maxlength="10"/>
+            <button class="btn-secondary" onclick="calculateTax()">Calculate</button>
           </div>
-          <div class="row-3" style="margin-top:10px;">
-            <input id="ship_city" class="input" placeholder="City"/>
-            <input id="ship_state" class="input" placeholder="State/Region"/>
-            <input id="ship_postal" class="input" placeholder="ZIP/Postal"/>
-          </div>
-          <div class="row" style="margin-top:10px;">
-            <select id="ship_country" class="select">
-              <option value="US" selected>United States</option>
-              <option value="CA">Canada</option>
-            </select>
-            <div></div>
-          </div>
+          <div id="taxResult" style="font-size: 13px; color: var(--text-secondary); margin-top: 8px;"></div>
         </div>
 
-        <div class="block">
-          <div class="check">
-            <input id="bill_same" type="checkbox" checked onchange="toggleBilling()"/>
-            <label for="bill_same">Billing same as shipping</label>
-          </div>
-          <div id="billingBlock" style="display:none;margin-top:10px;">
-            <div class="label">Billing Address *</div>
-            <div class="row">
-              <input id="bill_line1" class="input" placeholder="Address line 1"/>
-              <input id="bill_line2" class="input" placeholder="Address line 2 (optional)"/>
-            </div>
-            <div class="row-3" style="margin-top:10px;">
-              <input id="bill_city" class="input" placeholder="City"/>
-              <input id="bill_state" class="input" placeholder="State/Region"/>
-              <input id="bill_postal" class="input" placeholder="ZIP/Postal"/>
-            </div>
-            <div class="row" style="margin-top:10px;">
-              <select id="bill_country" class="select">
-                <option value="US" selected>United States</option>
-                <option value="CA">Canada</option>
-              </select>
-              <div></div>
+        <div class="quote-section">
+          <h3>Quote Items</h3>
+          <div id="quoteItems" class="quote-items">
+            <div class="empty-quote">
+              <div class="empty-quote-icon">📋</div>
+              <p>Add quantities above to build your quote</p>
             </div>
           </div>
         </div>
 
-        <div class="section-h"><h2>Cart</h2></div>
-        <div class="cart" id="cartItems"></div>
-
-        <div class="cart" style="padding-top:0;">
-          <button id="payBtn" class="primary" onclick="checkout()">Checkout & Pay</button>
-          <div class="muted">
-            Taxes are calculated automatically at Checkout using your shipping address and chosen shipping method.
+        <div class="quote-totals">
+          <div class="total-line">
+            <span>Subtotal</span>
+            <span id="subtotalAmount" class="total-value">$0.00</span>
+          </div>
+          <div class="total-line">
+            <span>Shipping</span>
+            <span class="total-value" style="color: #059669;">FREE</span>
+          </div>
+          <div class="total-line">
+            <span>Tax</span>
+            <span id="taxAmount" class="total-value">$0.00</span>
+          </div>
+          <div class="total-line">
+            <span>Total Quote</span>
+            <span id="totalAmount">$0.00</span>
           </div>
         </div>
       </div>
@@ -287,250 +797,302 @@
   </div>
 
   <script>
-    // ----- State -----
+    // State Management
     let products = [];
-    let cart = [];
+    let quote = [];
+    let taxRate = 0;
+    let taxAmount = 0;
 
-    // ----- On load -----
+    // Initialize
     window.addEventListener('DOMContentLoaded', async () => {
       const usp = new URLSearchParams(window.location.search);
       if (usp.get('success')) showStatus('Payment successful.');
       if (usp.get('canceled')) showError('Payment canceled.');
       await loadProducts();
-      updateCartDisplay();
-      toggleBilling();
+      updateQuoteDisplay();
     });
 
-    // Notices
-    function showStatus(t){ const el = document.getElementById('statusMsg'); el.textContent=t; el.className='msg ok'; }
-    function showError(t){ const el = document.getElementById('errorMsg'); el.textContent=t; el.className='msg err'; }
-
-    // Mirror email into toolbar for mockups
-    function mirrorEmail(){
-      const v = document.getElementById('customerEmail').value.trim();
-      if (v) document.getElementById('toolbarEmail').value = v;
-      loadProducts();
-    }
-    async function reloadWithEmail(){ await loadProducts(); }
-
-    // Billing toggle
-    function toggleBilling(){
-      const same = document.getElementById('bill_same').checked;
-      document.getElementById('billingBlock').style.display = same ? 'none' : 'block';
+    // Utility Functions
+    function showStatus(message) {
+      const el = document.getElementById('statusMsg');
+      el.textContent = message;
+      el.style.display = 'block';
+      setTimeout(() => el.style.display = 'none', 5000);
     }
 
-    // API
-    async function loadProducts(){
-      try{
+    function showError(message) {
+      const el = document.getElementById('errorMsg');
+      el.textContent = message;
+      el.style.display = 'block';
+      setTimeout(() => el.style.display = 'none', 8000);
+    }
+
+    function mirrorEmail() {
+      const customerEmail = document.getElementById('customerEmail')?.value?.trim();
+      if (customerEmail) {
+        document.getElementById('toolbarEmail').value = customerEmail;
+        loadProducts();
+      }
+    }
+
+    async function reloadWithEmail() {
+      await loadProducts();
+    }
+
+    // Product Loading
+    async function loadProducts() {
+      try {
         const email = document.getElementById('toolbarEmail').value.trim();
         const url = email ? `/api/products?customerEmail=${encodeURIComponent(email)}` : '/api/products';
-        const r = await fetch(url);
-        products = await r.json();
+        const response = await fetch(url);
+        products = await response.json();
         renderProducts();
-      }catch(e){
-        console.error('Load products failed', e);
+      } catch (error) {
+        console.error('Failed to load products:', error);
+        showError('Failed to load products. Please try again.');
         products = [];
         renderProducts();
       }
     }
 
-    // Render catalog
-    function renderProducts(){
+    // Product Rendering
+    function renderProducts() {
       const grid = document.getElementById('productGrid');
       grid.innerHTML = products.map(product => {
-        const bg = product.previewImageUrl ? `style="background-image:url('${product.previewImageUrl}')"` : '';
-        const tiers = (product.pricingTable||[]).map(t => `
-          <div class="tier" data-range="${t.quantity_range}">
-            <span>${t.quantity_range}</span>
-            <span>${t.price_per_unit}</span>
-          </div>`).join('');
+        const imageStyle = product.previewImageUrl 
+          ? `style="background-image: url('${product.previewImageUrl}')"` 
+          : '';
+        
+        const tiers = (product.pricingTable || []).map(tier => `
+          <div class="pricing-tier" data-range="${tier.quantity_range}">
+            <span>${tier.quantity_range}</span>
+            <span>${tier.price_per_unit}</span>
+          </div>
+        `).join('');
+
         return `
-          <div class="card">
-            <div class="thumb" ${bg}>${product.previewImageUrl ? '' : 'No image'}</div>
-            <div class="card-body">
-              <div class="name">${product.name}</div>
-              <div class="sku">${product.sku}</div>
-              <div class="desc">${product.description}</div>
-
-              <div class="tiers">${tiers}</div>
-
-              <div class="qty">
-                <button class="qbtn" onclick="updateQty('${product.id}', -1)">−</button>
-                <input class="input" id="qty-${product.id}" type="number" value="1" min="1" onchange="recalcCard('${product.id}')"/>
-                <button class="qbtn" onclick="updateQty('${product.id}', 1)">+</button>
+          <div class="product-card">
+            <div class="product-image" ${imageStyle}>
+              ${!product.previewImageUrl ? 'Branded mockup will appear here' : ''}
+            </div>
+            <div class="product-content">
+              <div class="product-header">
+                <h3 class="product-name">${product.name}</h3>
+                <div class="product-sku">${product.sku}</div>
+              </div>
+              <p class="product-description">${product.description}</p>
+              
+              <div class="pricing-tiers">
+                ${tiers}
               </div>
 
-              <div class="price" id="price-${product.id}">$${(product.currentPrice||0).toFixed(2)}</div>
-              <div class="save" id="savings-${product.id}"></div>
+              <div class="quantity-section">
+                <div class="quantity-label">Quantity</div>
+                <div class="quantity-controls">
+                  <button class="qty-btn" onclick="updateQuantity('${product.id}', -1)">−</button>
+                  <input class="qty-input" id="qty-${product.id}" type="number" value="0" min="0" 
+                         onchange="recalculateProduct('${product.id}')" />
+                  <button class="qty-btn" onclick="updateQuantity('${product.id}', 1)">+</button>
+                </div>
+              </div>
 
-              <button class="add" onclick="addToCart('${product.id}')">Add to cart</button>
+              <div class="product-pricing">
+                <div class="current-price" id="price-${product.id}">$0.00</div>
+                <div class="price-breakdown" id="breakdown-${product.id}">Select quantity for pricing</div>
+                <div class="savings" id="savings-${product.id}"></div>
+              </div>
             </div>
-          </div>`;
+          </div>
+        `;
       }).join('');
-      for (const p of products) recalcCard(p.id);
+
+      // Initialize all product calculations
+      products.forEach(product => recalculateProduct(product.id));
     }
 
-    function updateQty(productId, delta){
-      const el = document.getElementById(`qty-${productId}`);
-      const next = Math.max(1, (parseInt(el.value||'1',10) + delta));
-      el.value = next;
-      recalcCard(productId);
+    // Quantity Management
+    function updateQuantity(productId, delta) {
+      const input = document.getElementById(`qty-${productId}`);
+      const currentQty = parseInt(input.value || '0', 10);
+      const newQty = Math.max(0, currentQty + delta);
+      input.value = newQty;
+      recalculateProduct(productId);
     }
 
-    function findUnitPriceLocal(product, qty){
-      const q = Number(qty||1);
-      const tier = product.pricing.find(t => q >= t.minQty && (t.maxQty===null || q <= t.maxQty));
+    function findUnitPrice(product, quantity) {
+      const qty = Math.max(0, parseInt(quantity || '0', 10));
+      if (qty === 0) return 0;
+      
+      const tier = product.pricing.find(p => 
+        qty >= p.minQty && (p.maxQty === null || qty <= p.maxQty)
+      );
       return tier ? tier.price : product.pricing[0].price;
     }
 
-    function recalcCard(productId){
-      const qty = parseInt(document.getElementById(`qty-${productId}`).value||'1',10);
+    function recalculateProduct(productId) {
       const product = products.find(p => p.id === productId);
       if (!product) return;
 
-      const unit = findUnitPriceLocal(product, qty);
-      const total = unit * qty;
-      document.getElementById(`price-${product.id}`).innerHTML = `$${total.toFixed(2)} ($${unit.toFixed(2)} ea)`;
+      const qty = parseInt(document.getElementById(`qty-${productId}`).value || '0', 10);
+      const unitPrice = findUnitPrice(product, qty);
+      const totalPrice = unitPrice * qty;
 
-      const base = product.currentPrice || (product.pricing?.[0]?.price || unit);
-      const savings = qty > 1 ? (base - unit) * qty : 0;
-      document.getElementById(`savings-${product.id}`).innerHTML = savings > 0 ? `You save $${savings.toFixed(2)}` : '';
+      // Update price display
+      const priceEl = document.getElementById(`price-${product.id}`);
+      const breakdownEl = document.getElementById(`breakdown-${product.id}`);
+      const savingsEl = document.getElementById(`savings-${product.id}`);
 
-      // highlight active tier
-      const card = document.querySelector(`#qty-${productId}`).closest('.card');
-      if (card){
-        card.querySelectorAll('.tier').forEach(tierEl => {
+      if (qty === 0) {
+        priceEl.textContent = '$0.00';
+        breakdownEl.textContent = 'Select quantity for pricing';
+        savingsEl.textContent = '';
+      } else {
+        priceEl.textContent = `$${totalPrice.toFixed(2)}`;
+        breakdownEl.textContent = `${qty} × $${unitPrice.toFixed(2)} each`;
+        
+        // Calculate savings
+        const basePrice = product.pricing[0].price;
+        const savings = (basePrice - unitPrice) * qty;
+        savingsEl.textContent = savings > 0 ? `You save $${savings.toFixed(2)}` : '';
+      }
+
+      // Highlight active pricing tier
+      const card = document.querySelector(`#qty-${productId}`).closest('.product-card');
+      if (card) {
+        card.querySelectorAll('.pricing-tier').forEach(tierEl => {
           const range = tierEl.dataset.range;
-          const tier = product.pricing.find(x => range === `${x.minQty}-${x.maxQty}` || range === `${x.minQty}+`);
-          const active = tier && qty >= tier.minQty && (tier.maxQty===null || qty <= tier.maxQty);
-          tierEl.classList.toggle('active', !!active);
+          const tier = product.pricing.find(p => {
+            const rangeStr = p.maxQty ? `${p.minQty}-${p.maxQty}` : `${p.minQty}+`;
+            return range === rangeStr;
+          });
+          const isActive = tier && qty >= tier.minQty && (tier.maxQty === null || qty <= tier.maxQty);
+          tierEl.classList.toggle('active', isActive && qty > 0);
         });
       }
+
+      updateQuoteItems();
     }
 
-    // Cart
-    function addToCart(productId){
-      const product = products.find(p => p.id === productId);
-      const qty = parseInt(document.getElementById(`qty-${productId}`).value||'1',10);
-      const existing = cart.find(i => i.productId === productId);
-      if (existing) existing.quantity += qty;
-      else cart.push({ productId, product, quantity: qty });
-      updateCartDisplay();
-      document.getElementById(`qty-${productId}`).value = 1;
-      recalcCard(productId);
+    // Quote Management
+    function updateQuoteItems() {
+      quote = [];
+      
+      products.forEach(product => {
+        const qty = parseInt(document.getElementById(`qty-${product.id}`).value || '0', 10);
+        if (qty > 0) {
+          const unitPrice = findUnitPrice(product, qty);
+          quote.push({
+            productId: product.id,
+            product: product,
+            quantity: qty,
+            unitPrice: unitPrice,
+            totalPrice: unitPrice * qty
+          });
+        }
+      });
+
+      updateQuoteDisplay();
     }
 
-    function removeFromCart(productId){
-      cart = cart.filter(i => i.productId !== productId);
-      updateCartDisplay();
-    }
+    function updateQuoteDisplay() {
+      const itemsContainer = document.getElementById('quoteItems');
+      const subtotalEl = document.getElementById('subtotalAmount');
+      const taxAmountEl = document.getElementById('taxAmount');
+      const totalEl = document.getElementById('totalAmount');
 
-    function updateCartDisplay(){
-      const root = document.getElementById('cartItems');
-      if (!cart.length){
-        root.innerHTML = '<div class="cart-item" style="justify-content:center;color:#64748B">Cart is empty</div>';
+      if (quote.length === 0) {
+        itemsContainer.innerHTML = `
+          <div class="empty-quote">
+            <div class="empty-quote-icon">📋</div>
+            <p>Add quantities above to build your quote</p>
+          </div>
+        `;
+        subtotalEl.textContent = '$0.00';
+        taxAmountEl.textContent = '$0.00';
+        totalEl.textContent = '$0.00';
         return;
       }
-      let subtotal = 0;
-      const rows = cart.map(item => {
-        const unit = findUnitPriceLocal(item.product, item.quantity);
-        const line = unit * item.quantity;
-        subtotal += line;
-        return `
-          <div class="cart-item">
-            <div>
-              <div class="cart-name">${item.product.name}</div>
-              <div class="cart-meta">Qty ${item.quantity} × $${unit.toFixed(2)} — Line $${line.toFixed(2)}</div>
-            </div>
-            <button class="rm" onclick="removeFromCart('${item.productId}')">Remove</button>
-          </div>`;
-      }).join('');
-      root.innerHTML = `${rows}
-        <div class="totals">
-          <div class="line"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>
-          <div class="line"><span>Shipping</span><span>Selected at Checkout</span></div>
-          <div class="line"><span>Tax</span><span>Calculated at Checkout</span></div>
-          <div class="grand"><span>Estimated Total</span><span>$${subtotal.toFixed(2)} + shipping & tax</span></div>
-        </div>`;
+
+      // Render quote items
+      const itemsHtml = quote.map(item => `
+        <div class="quote-item">
+          <div class="item-details">
+            <h4>${item.product.name}</h4>
+            <div class="item-meta">Qty: ${item.quantity} × $${item.unitPrice.toFixed(2)}</div>
+            <button class="remove-btn" onclick="removeFromQuote('${item.productId}')">Remove</button>
+          </div>
+          <div class="item-price">
+            <div class="item-total">$${item.totalPrice.toFixed(2)}</div>
+          </div>
+        </div>
+      `).join('');
+
+      itemsContainer.innerHTML = itemsHtml;
+
+      // Calculate totals
+      const subtotal = quote.reduce((sum, item) => sum + item.totalPrice, 0);
+      const calculatedTax = subtotal * taxRate;
+      const total = subtotal + calculatedTax;
+
+      subtotalEl.textContent = `$${subtotal.toFixed(2)}`;
+      taxAmountEl.textContent = `$${calculatedTax.toFixed(2)}`;
+      totalEl.textContent = `$${total.toFixed(2)}`;
+
+      taxAmount = calculatedTax;
     }
 
-    // Address helpers
-    function gatherShipping(){
-      return {
-        line1: document.getElementById('ship_line1').value.trim(),
-        line2: document.getElementById('ship_line2').value.trim(),
-        city: document.getElementById('ship_city').value.trim(),
-        state: document.getElementById('ship_state').value.trim(),
-        postal_code: document.getElementById('ship_postal').value.trim(),
-        country: document.getElementById('ship_country').value
-      };
-    }
-    function gatherBilling(){
-      const same = document.getElementById('bill_same').checked;
-      if (same){
-        const s = gatherShipping();
-        return { ...s };
-      }
-      return {
-        line1: document.getElementById('bill_line1').value.trim(),
-        line2: document.getElementById('bill_line2').value.trim(),
-        city: document.getElementById('bill_city').value.trim(),
-        state: document.getElementById('bill_state').value.trim(),
-        postal_code: document.getElementById('bill_postal').value.trim(),
-        country: document.getElementById('bill_country').value
-      };
+    function removeFromQuote(productId) {
+      document.getElementById(`qty-${productId}`).value = '0';
+      recalculateProduct(productId);
     }
 
-    // Checkout
-    async function checkout(){
-      if (!cart.length) return showError('Please add products to the cart');
-
-      const customerInfo = {
-        name: document.getElementById('customerName').value.trim(),
-        company: document.getElementById('customerCompany').value.trim(),
-        email: document.getElementById('customerEmail').value.trim(),
-        phone: document.getElementById('customerPhone').value.trim()
-      };
-      if (!customerInfo.name || !customerInfo.email) return showError('Please provide name and email');
-
-      const shippingAddress = gatherShipping();
-      if (!shippingAddress.line1 || !shippingAddress.city || !shippingAddress.state || !shippingAddress.postal_code) {
-        return showError('Please complete the shipping address');
-      }
-      const billingAddress = gatherBilling();
-      if (!document.getElementById('bill_same').checked) {
-        if (!billingAddress.line1 || !billingAddress.city || !billingAddress.state || !billingAddress.postal_code) {
-          return showError('Please complete the billing address');
-        }
+    // Tax Calculator
+    async function calculateTax() {
+      const zipCode = document.getElementById('zipCode').value.trim();
+      const taxResult = document.getElementById('taxResult');
+      
+      if (!zipCode) {
+        taxResult.textContent = 'Please enter a ZIP code';
+        return;
       }
 
-      const payload = {
-        customerInfo,
-        products: cart.map(i => ({ productId: i.productId, quantity: i.quantity })),
-        shippingAddress,
-        billingAddress
-      };
+      if (quote.length === 0) {
+        taxResult.textContent = 'Add items to quote first';
+        return;
+      }
 
-      try{
-        const btn = document.getElementById('payBtn');
-        btn.disabled = true;
-        const r = await fetch('/api/create-checkout', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify(payload)
+      try {
+        taxResult.textContent = 'Calculating...';
+        
+        const response = await fetch('/api/calculate-tax', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            zipCode: zipCode,
+            items: quote.map(item => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice
+            }))
+          })
         });
-        const data = await r.json();
-        btn.disabled = false;
 
-        if (data.url){
-          window.location = data.url;
+        const data = await response.json();
+        
+        if (data.error) {
+          taxResult.textContent = `Error: ${data.error}`;
+          taxRate = 0;
         } else {
-          showError(data.error || 'Failed to create payment link');
-          console.error('Checkout error:', data.details || data);
+          taxRate = data.taxRate || 0;
+          taxResult.textContent = `Tax rate: ${(taxRate * 100).toFixed(2)}% for ${zipCode}`;
         }
-      }catch(e){
-        document.getElementById('payBtn').disabled = false;
-        showError('Checkout error: ' + e.message);
+        
+        updateQuoteDisplay();
+      } catch (error) {
+        console.error('Tax calculation failed:', error);
+        taxResult.textContent = 'Tax calculation failed';
+        taxRate = 0;
+        updateQuoteDisplay();
       }
     }
   </script>

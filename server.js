@@ -461,6 +461,76 @@ app.post('/api/calculate-price', (req, res) => {
   });
 });
 
+/* Tax calculation endpoint */
+app.post('/api/calculate-tax', async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(500).json({ error: 'Stripe not configured for tax calculation' });
+    }
+
+    const { zipCode, items } = req.body || {};
+    if (!zipCode || !Array.isArray(items) || !items.length) {
+      return res.status(400).json({ error: 'ZIP code and items required' });
+    }
+
+    // Calculate subtotal in cents
+    let subtotalCents = 0;
+    const lineItems = [];
+
+    for (const item of items) {
+      const product = PRODUCTS.find(p => p.id === item.productId);
+      if (!product) continue;
+      
+      const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
+      const unitPrice = item.unitPrice || calculatePrice(product, qty);
+      const unitCents = Math.round(unitPrice * 100);
+      const lineCents = unitCents * qty;
+      
+      subtotalCents += lineCents;
+      lineItems.push({
+        amount: unitCents,
+        quantity: qty,
+        tax_code: 'txcd_99999999', // General merchandise
+        reference: product.id
+      });
+    }
+
+    if (subtotalCents === 0) {
+      return res.json({ taxRate: 0, taxAmount: 0, subtotal: 0 });
+    }
+
+    // Use Stripe Tax API
+    const taxCalculation = await stripe.tax.calculations.create({
+      currency: 'usd',
+      customer_details: {
+        address: {
+          postal_code: zipCode,
+          country: 'US'
+        },
+        address_source: 'shipping'
+      },
+      line_items: lineItems
+    });
+
+    const taxAmountCents = taxCalculation.tax_amount_exclusive || 0;
+    const taxRate = subtotalCents > 0 ? taxAmountCents / subtotalCents : 0;
+
+    res.json({
+      taxRate: Number(taxRate.toFixed(6)),
+      taxAmount: Number((taxAmountCents / 100).toFixed(2)),
+      subtotal: Number((subtotalCents / 100).toFixed(2)),
+      zipCode: zipCode
+    });
+
+  } catch (error) {
+    console.error('Tax calculation error:', error);
+    res.status(500).json({ 
+      error: 'Tax calculation failed', 
+      details: error.message 
+    });
+  }
+});
+
 /* Stripe Checkout with Stripe Tax + shipping */
 app.post('/api/create-checkout', async (req, res) => {
   try {
