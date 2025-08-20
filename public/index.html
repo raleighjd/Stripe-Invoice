@@ -905,14 +905,14 @@
             <span>Total Quote</span>
             <span id="totalAmount">$0.00</span>
           </div>
-          
-          <div id="invoiceSection" class="invoice-section" style="display: none;">
-            <button id="createInvoiceBtn" class="btn-invoice" onclick="createInvoice()">
-              <span class="btn-icon">📄</span>
-              Create Invoice
-            </button>
-            <p class="invoice-note">Generate a professional invoice for this quote</p>
-          </div>
+        </div>
+        
+        <div id="invoiceSection" class="invoice-section" style="display: none;">
+          <button id="createInvoiceBtn" class="btn-invoice" onclick="createInvoice()">
+            <span class="btn-icon">📄</span>
+            Create Invoice
+          </button>
+          <p class="invoice-note">Generate a professional invoice for this quote</p>
         </div>
       </div>
     </div>
@@ -1164,7 +1164,9 @@
 
       // Show/hide invoice section based on quote content
       const invoiceSection = document.getElementById('invoiceSection');
-      invoiceSection.style.display = quote.length > 0 ? 'block' : 'none';
+      if (invoiceSection) {
+        invoiceSection.style.display = quote.length > 0 ? 'block' : 'none';
+      }
     }
 
     function removeFromQuote(productId) {
