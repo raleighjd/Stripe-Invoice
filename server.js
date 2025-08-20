@@ -1,5 +1,6 @@
 // server.js
 require('dotenv').config();
+console.log('STRIPE_SECRET_KEY:', process.env.STRIPE_SECRET_KEY);
 const express = require('express');
 const app = express();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || '');
@@ -456,6 +457,56 @@ app.post('/api/calculate-price', (req, res) => {
   });
 });
 
+/* Tax calculation endpoint */
+app.post('/api/calculate-tax', async (req, res) => {
+  try {
+    if (!CONFIG.STRIPE_SECRET_KEY) {
+      return res.status(500).json({ error: 'Missing STRIPE_SECRET_KEY' });
+    }
+
+    const { zip, items } = req.body || {};
+    if (!zip || !Array.isArray(items) || !items.length) {
+      return res.json({ taxAmount: 0 });
+    }
+
+    // Create line items for Stripe Tax calculation
+    const line_items = items.map((item) => {
+      const product = PRODUCTS.find(p => p.id === item.productId);
+      if (!product) throw new Error(`Unknown product ${item.productId}`);
+      
+      return {
+        amount: Math.round(item.unitPrice * 100), // Convert to cents
+        quantity: item.quantity,
+        reference: item.productId
+      };
+    });
+
+    // Use Stripe Tax API to calculate tax
+    const calculation = await stripe.tax.calculations.create({
+      currency: 'usd',
+      line_items,
+      customer_details: {
+        address: {
+          postal_code: zip,
+          country: 'US'
+        },
+        address_source: 'shipping'
+      }
+    });
+
+    const taxAmount = calculation.tax_amount_exclusive / 100; // Convert back to dollars
+
+    res.json({ 
+      taxAmount: Number(taxAmount.toFixed(2)),
+      taxBreakdown: calculation.tax_breakdown 
+    });
+
+  } catch (err) {
+    console.error('Tax calculation error:', err);
+    res.status(500).json({ error: 'Failed to calculate tax', taxAmount: 0 });
+  }
+});
+
 /* Stripe Checkout with Stripe Tax + shipping */
 app.post('/api/create-checkout', async (req, res) => {
   try {
@@ -464,24 +515,19 @@ app.post('/api/create-checkout', async (req, res) => {
     }
 
     const { customerInfo, products: cart, shippingAddress, billingAddress } = req.body || {};
-    if (!customerInfo?.email || !Array.isArray(cart) || !cart.length) {
-      return res.status(400).json({ error: 'Missing customer email or cart' });
+    if (!Array.isArray(cart) || !cart.length) {
+      return res.status(400).json({ error: 'Cart is empty' });
     }
-    if (!shippingAddress || !shippingAddress.line1 || !shippingAddress.city || !shippingAddress.state || !shippingAddress.postal_code) {
-      return res.status(400).json({ error: 'Shipping address incomplete' });
-    }
-
-    const normalizedShip = normalizeAddress(shippingAddress);
-    const normalizedBill = normalizeAddress(billingAddress || shippingAddress);
-
-    const customerId = await getOrCreateCustomer(customerInfo, normalizedBill, normalizedShip);
+    
+    // Let Stripe handle all customer data collection - no pre-creation needed
+    const safeCustomerInfo = customerInfo || { name: '', email: '', company: '', phone: '' };
 
     const line_items = cart.map((item) => {
       const p = PRODUCTS.find((x) => x.id === item.productId);
       if (!p) throw new Error(`Unknown product ${item.productId}`);
       const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
       const unit = calculatePrice(p, qty);
-      const img = getProductImageUrl(p, customerInfo.email);
+      const img = getProductImageUrl(p, safeCustomerInfo.email || 'default@example.com');
 
       return {
         price_data: {
@@ -499,30 +545,30 @@ app.post('/api/create-checkout', async (req, res) => {
     });
 
     const subtotalCents = computeSubtotalCents(cart);
-    const shipping_options = shippingOptionsFor(subtotalCents, normalizedShip);
+    // Use default US shipping since Stripe will collect real address
+    const shipping_options = shippingOptionsFor(subtotalCents, { country: 'US' });
 
-    const session = await stripe.checkout.sessions.create({
+    const sessionConfig = {
       mode: 'payment',
-      customer: customerId,
-
-      customer_update: { address: 'auto', shipping: 'auto', name: 'auto' },
-
+      
+      // Let Stripe collect all customer information
       billing_address_collection: 'required',
       shipping_address_collection: { allowed_countries: CONFIG.ALLOWED_SHIP_COUNTRIES },
-
-      shipping_options,
-
-      automatic_tax: { enabled: true },
-
       phone_number_collection: { enabled: true },
 
-      line_items,
+      // Pre-fill email if provided
+      customer_email: safeCustomerInfo.email || undefined,
 
+      shipping_options,
+      automatic_tax: { enabled: true },
+      line_items,
       allow_promotion_codes: true,
 
       success_url: `${CONFIG.PUBLIC_BASE_URL}/?success=1&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${CONFIG.PUBLIC_BASE_URL}/?canceled=1`
-    });
+    };
+
+    const session = await stripe.checkout.sessions.create(sessionConfig);
 
     res.json({ url: session.url });
   } catch (err) {

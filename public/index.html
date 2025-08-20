@@ -4,6 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Quote & Checkout</title>
+  <link rel="icon" href="data:,">
   <style>
     :root{
       --bg: #F6F7FB;
@@ -11,9 +12,9 @@
       --text: #0F172A;         /* slate-900 */
       --muted: #475569;        /* slate-600 */
       --line: #E5E7EB;         /* gray-200 */
-      --primary: #1E3A8A;      /* indigo-900 */
-      --primary-600: #2E49A6;  /* hover */
-      --accent: #0EA5E9;       /* cyan-500 (sparingly) */
+      --primary: #DC2626;      /* red-600 */
+      --primary-600: #B91C1C;  /* red-700 hover */
+      --accent: #EF4444;       /* red-500 (sparingly) */
       --success: #15803D;      /* green-700 */
       --danger: #B91C1C;       /* red-700 */
       --radius: 12px;
@@ -72,7 +73,7 @@
     }
     .grid{
       display:grid;
-      grid-template-columns: minmax(0, 1fr) 360px; /* <— catalog expands, checkout fixed ~Amazon width */
+      grid-template-columns: minmax(0, 1fr) 280px; /* Smaller sidebar: 280px instead of 360px */
       gap:24px;
       align-items: start;
     }
@@ -96,7 +97,7 @@
     }
     .card:hover{box-shadow:0 10px 20px rgba(2,8,23,0.08);transform:translateY(-1px)}
     .thumb{
-      height:180px;background:#F2F3F7;border-bottom:1px solid var(--line);
+      height:280px;background:#F2F3F7;border-bottom:1px solid var(--line);
       background-size:contain;background-repeat:no-repeat;background-position:center;
       display:flex;align-items:center;justify-content:center;color:#94A3B8;font-size:12px;
     }
@@ -112,7 +113,7 @@
       display:flex;justify-content:space-between;align-items:center;
       font-size:12px;padding:6px 8px;border-radius:6px;
     }
-    .tier.active{background:#EEF2FF;color:#111827}
+    .tier.active{background:#FEF2F2;color:#111827}
 
     .qty{
       display:flex;align-items:center;gap:8px;margin-bottom:10px;
@@ -144,7 +145,7 @@
       padding:0 10px;
       font-size:14px;
       background:#fff;
-      width: 100%;               /* NEW: fill grid cell, don’t overflow */
+      width: 100%;               /* NEW: fill grid cell, donâ€™t overflow */
       max-width: 100%;           /* NEW: belt-and-suspenders */
     }
     .check{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:13px;color:var(--muted)}
@@ -169,6 +170,25 @@
     }
     .primary:hover{background:var(--primary-600)}
     .muted{font-size:12px;color:#64748B;line-height:1.4;margin-top:8px}
+
+    /* Status Messages */
+    .msg {
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .msg.ok {
+      background: #ECFDF5;
+      color: #065F46;
+      border: 1px solid #A7F3D0;
+    }
+    .msg.err {
+      background: #FEF2F2;
+      color: #B91C1C;
+      border: 1px solid #FECACA;
+    }
 
     /* Responsive */
     @media (max-width: 1100px){
@@ -213,73 +233,19 @@
 
       <!-- Sidebar -->
       <div class="panel side">
-        <div class="section-h"><h2>Checkout Details</h2></div>
-
-        <div class="block">
-          <div class="label">Customer</div>
-          <div class="row">
-            <input id="customerName" class="input" placeholder="Full name *"/>
-            <input id="customerCompany" class="input" placeholder="Company"/>
-          </div>
-          <div class="row" style="margin-top:10px;">
-            <input id="customerEmail" class="input" placeholder="Email *" onblur="mirrorEmail()"/>
-            <input id="customerPhone" class="input" placeholder="Phone"/>
-          </div>
-        </div>
-
-        <div class="block">
-          <div class="label">Shipping Address *</div>
-          <div class="row">
-            <input id="ship_line1" class="input" placeholder="Address line 1"/>
-            <input id="ship_line2" class="input" placeholder="Address line 2 (optional)"/>
-          </div>
-          <div class="row-3" style="margin-top:10px;">
-            <input id="ship_city" class="input" placeholder="City"/>
-            <input id="ship_state" class="input" placeholder="State/Region"/>
-            <input id="ship_postal" class="input" placeholder="ZIP/Postal"/>
-          </div>
-          <div class="row" style="margin-top:10px;">
-            <select id="ship_country" class="select">
-              <option value="US" selected>United States</option>
-              <option value="CA">Canada</option>
-            </select>
-            <div></div>
-          </div>
-        </div>
-
-        <div class="block">
-          <div class="check">
-            <input id="bill_same" type="checkbox" checked onchange="toggleBilling()"/>
-            <label for="bill_same">Billing same as shipping</label>
-          </div>
-          <div id="billingBlock" style="display:none;margin-top:10px;">
-            <div class="label">Billing Address *</div>
-            <div class="row">
-              <input id="bill_line1" class="input" placeholder="Address line 1"/>
-              <input id="bill_line2" class="input" placeholder="Address line 2 (optional)"/>
-            </div>
-            <div class="row-3" style="margin-top:10px;">
-              <input id="bill_city" class="input" placeholder="City"/>
-              <input id="bill_state" class="input" placeholder="State/Region"/>
-              <input id="bill_postal" class="input" placeholder="ZIP/Postal"/>
-            </div>
-            <div class="row" style="margin-top:10px;">
-              <select id="bill_country" class="select">
-                <option value="US" selected>United States</option>
-                <option value="CA">Canada</option>
-              </select>
-              <div></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="section-h"><h2>Cart</h2></div>
+        <div class="section-h"><h2>Live Quote</h2></div>
+        
         <div class="cart" id="cartItems"></div>
 
+        <div class="block">
+          <div class="label">More Accurate Pricing (Optional)</div>
+          <input id="taxZip" class="input" placeholder="ZIP code for sales tax calculation" onchange="calculateTax()"/>
+        </div>
+
         <div class="cart" style="padding-top:0;">
-          <button id="payBtn" class="primary" onclick="checkout()">Checkout & Pay</button>
+          <button id="payBtn" class="primary" onclick="getQuote()">🚀 Checkout with Stripe</button>
           <div class="muted">
-            Taxes are calculated automatically at Checkout using your shipping address and chosen shipping method.
+            Stripe will collect your shipping address, payment info, and calculate taxes automatically.
           </div>
         </div>
       </div>
@@ -298,7 +264,6 @@
       if (usp.get('canceled')) showError('Payment canceled.');
       await loadProducts();
       updateCartDisplay();
-      toggleBilling();
     });
 
     // Notices
@@ -307,11 +272,12 @@
 
     // Mirror email into toolbar for mockups
     function mirrorEmail(){
-      const v = document.getElementById('customerEmail').value.trim();
-      if (v) document.getElementById('toolbarEmail').value = v;
-      loadProducts();
+      const v = document.getElementById('toolbarEmail').value.trim();
+      if (v) loadProducts();
     }
-    async function reloadWithEmail(){ await loadProducts(); }
+    async function reloadWithEmail(){ 
+      await loadProducts(); 
+    }
 
     // Billing toggle
     function toggleBilling(){
@@ -329,6 +295,7 @@
         renderProducts();
       }catch(e){
         console.error('Load products failed', e);
+        showError('Failed to load products: ' + e.message);
         products = [];
         renderProducts();
       }
@@ -356,14 +323,12 @@
 
               <div class="qty">
                 <button class="qbtn" onclick="updateQty('${product.id}', -1)">−</button>
-                <input class="input" id="qty-${product.id}" type="number" value="1" min="1" onchange="recalcCard('${product.id}')"/>
+                <input class="input" id="qty-${product.id}" type="number" value="0" min="0" onchange="recalcCard('${product.id}'); updateLiveQuote()"/>
                 <button class="qbtn" onclick="updateQty('${product.id}', 1)">+</button>
               </div>
 
-              <div class="price" id="price-${product.id}">$${(product.currentPrice||0).toFixed(2)}</div>
+              <div class="price" id="price-${product.id}">Starting at ${(product.currentPrice||0).toFixed(2)}</div>
               <div class="save" id="savings-${product.id}"></div>
-
-              <button class="add" onclick="addToCart('${product.id}')">Add to cart</button>
             </div>
           </div>`;
       }).join('');
@@ -372,9 +337,10 @@
 
     function updateQty(productId, delta){
       const el = document.getElementById(`qty-${productId}`);
-      const next = Math.max(1, (parseInt(el.value||'1',10) + delta));
+      const next = Math.max(0, (parseInt(el.value||'0',10) + delta));
       el.value = next;
       recalcCard(productId);
+      updateLiveQuote();
     }
 
     function findUnitPriceLocal(product, qty){
@@ -384,17 +350,23 @@
     }
 
     function recalcCard(productId){
-      const qty = parseInt(document.getElementById(`qty-${productId}`).value||'1',10);
+      const qty = parseInt(document.getElementById(`qty-${productId}`).value||'0',10);
       const product = products.find(p => p.id === productId);
       if (!product) return;
 
+      if (qty === 0) {
+        document.getElementById(`price-${product.id}`).innerHTML = `Starting at ${(product.currentPrice||0).toFixed(2)}`;
+        document.getElementById(`savings-${product.id}`).innerHTML = '';
+        return;
+      }
+
       const unit = findUnitPriceLocal(product, qty);
       const total = unit * qty;
-      document.getElementById(`price-${product.id}`).innerHTML = `$${total.toFixed(2)} ($${unit.toFixed(2)} ea)`;
+      document.getElementById(`price-${product.id}`).innerHTML = `${total.toFixed(2)} (${unit.toFixed(2)} ea)`;
 
       const base = product.currentPrice || (product.pricing?.[0]?.price || unit);
       const savings = qty > 1 ? (base - unit) * qty : 0;
-      document.getElementById(`savings-${product.id}`).innerHTML = savings > 0 ? `You save $${savings.toFixed(2)}` : '';
+      document.getElementById(`savings-${product.id}`).innerHTML = savings > 0 ? `You save ${savings.toFixed(2)}` : '';
 
       // highlight active tier
       const card = document.querySelector(`#qty-${productId}`).closest('.card');
@@ -408,16 +380,56 @@
       }
     }
 
-    // Cart
-    function addToCart(productId){
-      const product = products.find(p => p.id === productId);
-      const qty = parseInt(document.getElementById(`qty-${productId}`).value||'1',10);
-      const existing = cart.find(i => i.productId === productId);
-      if (existing) existing.quantity += qty;
-      else cart.push({ productId, product, quantity: qty });
+    // Live quote updates
+    function updateLiveQuote(){
+      // Build cart from current quantities
+      cart = [];
+      for (const product of products) {
+        const qty = parseInt(document.getElementById(`qty-${product.id}`).value||'0',10);
+        if (qty > 0) {
+          cart.push({ productId: product.id, product, quantity: qty });
+        }
+      }
       updateCartDisplay();
-      document.getElementById(`qty-${productId}`).value = 1;
-      recalcCard(productId);
+      calculateTax();
+    }
+
+    // Tax calculation
+    let taxAmount = 0;
+    async function calculateTax(){
+      const zip = document.getElementById('taxZip').value.trim();
+      if (!zip || !cart.length) {
+        taxAmount = 0;
+        updateCartDisplay();
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/calculate-tax', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            zip: zip,
+            items: cart.map(item => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              unitPrice: findUnitPriceLocal(item.product, item.quantity)
+            }))
+          })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          taxAmount = data.taxAmount || 0;
+        } else {
+          taxAmount = 0;
+        }
+      } catch (e) {
+        console.error('Tax calculation failed:', e);
+        taxAmount = 0;
+      }
+      
+      updateCartDisplay();
     }
 
     function removeFromCart(productId){
@@ -428,7 +440,7 @@
     function updateCartDisplay(){
       const root = document.getElementById('cartItems');
       if (!cart.length){
-        root.innerHTML = '<div class="cart-item" style="justify-content:center;color:#64748B">Cart is empty</div>';
+        root.innerHTML = '<div class="cart-item" style="justify-content:center;color:#64748B">No items selected</div>';
         return;
       }
       let subtotal = 0;
@@ -440,17 +452,17 @@
           <div class="cart-item">
             <div>
               <div class="cart-name">${item.product.name}</div>
-              <div class="cart-meta">Qty ${item.quantity} × $${unit.toFixed(2)} — Line $${line.toFixed(2)}</div>
+              <div class="cart-meta">Qty ${item.quantity} × ${unit.toFixed(2)} — Line ${line.toFixed(2)}</div>
             </div>
             <button class="rm" onclick="removeFromCart('${item.productId}')">Remove</button>
           </div>`;
       }).join('');
       root.innerHTML = `${rows}
         <div class="totals">
-          <div class="line"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>
-          <div class="line"><span>Shipping</span><span>Selected at Checkout</span></div>
-          <div class="line"><span>Tax</span><span>Calculated at Checkout</span></div>
-          <div class="grand"><span>Estimated Total</span><span>$${subtotal.toFixed(2)} + shipping & tax</span></div>
+          <div class="line"><span>Subtotal</span><span>${subtotal.toFixed(2)}</span></div>
+          <div class="line"><span>Shipping</span><span>Will be calculated</span></div>
+          <div class="line"><span>Tax</span><span>Will be calculated</span></div>
+          <div class="grand"><span>Quote Total</span><span>${subtotal.toFixed(2)} + shipping & tax</span></div>
         </div>`;
     }
 
@@ -481,57 +493,72 @@
       };
     }
 
-    // Checkout
-    async function checkout(){
-      if (!cart.length) return showError('Please add products to the cart');
+    // Get Quote - Direct to Stripe Checkout
+    async function getQuote(){
+      if (!cart.length) return showError('Please add products to the cart by adjusting quantities above 0');
 
-      const customerInfo = {
-        name: document.getElementById('customerName').value.trim(),
-        company: document.getElementById('customerCompany').value.trim(),
-        email: document.getElementById('customerEmail').value.trim(),
-        phone: document.getElementById('customerPhone').value.trim()
-      };
-      if (!customerInfo.name || !customerInfo.email) return showError('Please provide name and email');
+      const btn = document.getElementById('payBtn');
+      btn.disabled = true;
+      btn.textContent = 'Creating Checkout...';
 
-      const shippingAddress = gatherShipping();
-      if (!shippingAddress.line1 || !shippingAddress.city || !shippingAddress.state || !shippingAddress.postal_code) {
-        return showError('Please complete the shipping address');
-      }
-      const billingAddress = gatherBilling();
-      if (!document.getElementById('bill_same').checked) {
-        if (!billingAddress.line1 || !billingAddress.city || !billingAddress.state || !billingAddress.postal_code) {
-          return showError('Please complete the billing address');
-        }
-      }
+      try {
+        // Create minimal payload - let Stripe collect customer info
+        const customerEmail = document.getElementById('toolbarEmail').value.trim();
+        
+        const payload = {
+          customerInfo: { 
+            name: '', 
+            email: customerEmail || '', 
+            company: '', 
+            phone: '' 
+          },
+          products: cart.map(i => ({ productId: i.productId, quantity: i.quantity })),
+          shippingAddress: { 
+            line1: 'TBD', 
+            line2: '', 
+            city: 'TBD', 
+            state: 'TBD', 
+            postal_code: 'TBD', 
+            country: 'US' 
+          },
+          billingAddress: { 
+            line1: 'TBD', 
+            line2: '', 
+            city: 'TBD', 
+            state: 'TBD', 
+            postal_code: 'TBD', 
+            country: 'US' 
+          }
+        };
 
-      const payload = {
-        customerInfo,
-        products: cart.map(i => ({ productId: i.productId, quantity: i.quantity })),
-        shippingAddress,
-        billingAddress
-      };
-
-      try{
-        const btn = document.getElementById('payBtn');
-        btn.disabled = true;
-        const r = await fetch('/api/create-checkout', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
+        const response = await fetch('/api/create-checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        const data = await r.json();
-        btn.disabled = false;
+        
+        const data = await response.json();
 
-        if (data.url){
+        if (data.url) {
+          showStatus('Redirecting to Stripe Checkout...');
           window.location = data.url;
         } else {
-          showError(data.error || 'Failed to create payment link');
+          showError(data.error || 'Failed to create checkout session');
           console.error('Checkout error:', data.details || data);
         }
-      }catch(e){
-        document.getElementById('payBtn').disabled = false;
-        showError('Checkout error: ' + e.message);
+        
+      } catch(e) {
+        showError('Checkout failed: ' + e.message);
+        console.error('Stripe checkout failed:', e);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀 Checkout with Stripe';
       }
+    }
+
+    // Legacy checkout function (keeping for compatibility)
+    async function checkout(){
+      return await getQuote();
     }
   </script>
 </body>
