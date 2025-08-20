@@ -119,11 +119,13 @@
     }
     .thumb{
       height:280px;background:#F2F3F7;border-bottom:1px solid var(--line);
-      background-size:contain;background-repeat:no-repeat;background-position:center;
+      background-size:cover;background-repeat:no-repeat;background-position:center;
       display:flex;align-items:center;justify-content:center;color:#94A3B8;font-size:12px;
       transition: all .3s ease;
       position: relative;
       overflow: hidden;
+      image-rendering: -webkit-optimize-contrast;
+      image-rendering: crisp-edges;
     }
     .thumb::after {
       content: '';
