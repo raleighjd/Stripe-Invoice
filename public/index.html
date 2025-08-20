@@ -1511,43 +1511,260 @@
     }
 
     // Invoice Creation
-    async function createInvoice() {
+    let currentStep = 1;
+    const totalSteps = 3;
+
+    function openInvoiceModal() {
       if (quote.length === 0) {
         showError('Please add items to your quote first');
         return;
       }
-
+      
+      // Pre-fill email if available
       const customerEmail = document.getElementById('toolbarEmail').value.trim();
-      if (!customerEmail) {
-        showError('Please enter a customer email address');
-        return;
+      if (customerEmail) {
+        document.getElementById('customerEmail').value = customerEmail;
       }
+      
+      // Set invoice date
+      document.getElementById('invoiceDate').textContent = new Date().toLocaleDateString();
+      
+      // Generate invoice number
+      const invoiceNum = 'INV-' + new Date().getFullYear() + '-' + String(Math.floor(Math.random() * 1000)).padStart(3, '0');
+      document.getElementById('invoiceNumber').textContent = invoiceNum;
+      
+      // Show modal
+      document.getElementById('invoiceModal').classList.add('show');
+      document.body.style.overflow = 'hidden';
+      
+      // Reset to first step
+      currentStep = 1;
+      updateStepDisplay();
+    }
 
-      const btn = document.getElementById('createInvoiceBtn');
+    function closeInvoiceModal() {
+      document.getElementById('invoiceModal').classList.remove('show');
+      document.body.style.overflow = '';
+      
+      // Reset form
+      setTimeout(() => {
+        document.querySelectorAll('.step-content').forEach(step => step.classList.remove('active'));
+        document.getElementById('step1').classList.add('active');
+        document.querySelectorAll('.step').forEach(step => step.classList.remove('active', 'completed'));
+        document.querySelector('.step[data-step="1"]').classList.add('active');
+        currentStep = 1;
+        updateStepDisplay();
+      }, 300);
+    }
+
+    function nextStep() {
+      if (currentStep < totalSteps) {
+        if (validateCurrentStep()) {
+          // Mark current step as completed
+          document.querySelector(`.step[data-step="${currentStep}"]`).classList.add('completed');
+          document.querySelector(`.step[data-step="${currentStep}"]`).classList.remove('active');
+          
+          currentStep++;
+          
+          // Activate next step
+          document.querySelector(`.step[data-step="${currentStep}"]`).classList.add('active');
+          
+          updateStepDisplay();
+          
+          if (currentStep === 3) {
+            updateInvoicePreview();
+          }
+        }
+      }
+    }
+
+    function previousStep() {
+      if (currentStep > 1) {
+        // Remove completed status from current step
+        document.querySelector(`.step[data-step="${currentStep}"]`).classList.remove('active');
+        
+        currentStep--;
+        
+        // Activate previous step
+        document.querySelector(`.step[data-step="${currentStep}"]`).classList.remove('completed');
+        document.querySelector(`.step[data-step="${currentStep}"]`).classList.add('active');
+        
+        updateStepDisplay();
+      }
+    }
+
+    function updateStepDisplay() {
+      // Hide all step contents
+      document.querySelectorAll('.step-content').forEach(step => step.classList.remove('active'));
+      
+      // Show current step content
+      document.getElementById(`step${currentStep}`).classList.add('active');
+      
+      // Update buttons
+      const prevBtn = document.getElementById('prevBtn');
+      const nextBtn = document.getElementById('nextBtn');
+      const finalizeBtn = document.getElementById('finalizeBtn');
+      
+      prevBtn.style.display = currentStep > 1 ? 'block' : 'none';
+      nextBtn.style.display = currentStep < totalSteps ? 'block' : 'none';
+      finalizeBtn.style.display = currentStep === totalSteps ? 'block' : 'none';
+      
+      // Update modal title
+      const titles = {
+        1: 'Customer Information',
+        2: 'Billing & Shipping Details', 
+        3: 'Review & Generate Invoice'
+      };
+      document.getElementById('modalTitle').textContent = titles[currentStep];
+    }
+
+    function validateCurrentStep() {
+      if (currentStep === 1) {
+        const name = document.getElementById('customerName').value.trim();
+        const email = document.getElementById('customerEmail').value.trim();
+        
+        if (!name || !email) {
+          showError('Please fill in required customer information');
+          return false;
+        }
+        
+        if (!email.includes('@')) {
+          showError('Please enter a valid email address');
+          return false;
+        }
+      }
+      
+      if (currentStep === 2) {
+        const address = document.getElementById('billingAddress1').value.trim();
+        const city = document.getElementById('billingCity').value.trim();
+        const state = document.getElementById('billingState').value.trim();
+        const zip = document.getElementById('billingZip').value.trim();
+        
+        if (!address || !city || !state || !zip) {
+          showError('Please fill in required billing address fields');
+          return false;
+        }
+      }
+      
+      return true;
+    }
+
+    function toggleShippingAddress() {
+      const checkbox = document.getElementById('sameAsShipping');
+      const shippingSection = document.getElementById('shippingSection');
+      
+      if (checkbox.checked) {
+        shippingSection.style.display = 'none';
+      } else {
+        shippingSection.style.display = 'block';
+      }
+    }
+
+    function updateInvoicePreview() {
+      // Update customer details
+      const billToDetails = document.getElementById('billToDetails');
+      const shipToDetails = document.getElementById('shipToDetails');
+      
+      const customerName = document.getElementById('customerName').value;
+      const customerEmail = document.getElementById('customerEmail').value;
+      const customerPhone = document.getElementById('customerPhone').value;
+      const contactPerson = document.getElementById('contactPerson').value;
+      
+      const billingAddress = `
+        <strong>${customerName}</strong><br>
+        ${contactPerson ? contactPerson + '<br>' : ''}
+        ${document.getElementById('billingAddress1').value}<br>
+        ${document.getElementById('billingCity').value}, ${document.getElementById('billingState').value} ${document.getElementById('billingZip').value}<br>
+        ${customerEmail}<br>
+        ${customerPhone || ''}
+      `;
+      
+      billToDetails.innerHTML = billingAddress;
+      
+      // Check if shipping is same as billing
+      const sameAsShipping = document.getElementById('sameAsShipping').checked;
+      if (sameAsShipping) {
+        shipToDetails.innerHTML = billingAddress;
+      } else {
+        const shippingAddress = `
+          <strong>${customerName}</strong><br>
+          ${document.getElementById('shippingAddress1').value || 'Same as billing'}<br>
+          ${document.getElementById('shippingCity').value || ''} ${document.getElementById('shippingState').value || ''} ${document.getElementById('shippingZip').value || ''}<br>
+        `;
+        shipToDetails.innerHTML = shippingAddress;
+      }
+      
+      // Update items table
+      const itemsTable = document.getElementById('invoiceItemsTable');
+      itemsTable.innerHTML = quote.map(item => `
+        <tr>
+          <td><strong>${item.product.name}</strong><br><small>${item.product.description}</small></td>
+          <td>${item.product.sku}</td>
+          <td>${item.quantity}</td>
+          <td>$${item.unitPrice.toFixed(2)}</td>
+          <td><strong>$${item.totalPrice.toFixed(2)}</strong></td>
+        </tr>
+      `).join('');
+      
+      // Update totals
+      const subtotal = quote.reduce((sum, item) => sum + item.totalPrice, 0);
+      const calculatedTax = subtotal * taxRate;
+      const total = subtotal + calculatedTax;
+      
+      document.getElementById('invoiceSubtotal').textContent = `$${subtotal.toFixed(2)}`;
+      document.getElementById('invoiceTax').textContent = `$${calculatedTax.toFixed(2)}`;
+      document.getElementById('invoiceTotal').textContent = `$${total.toFixed(2)}`;
+    }
+
+    function downloadPDF() {
+      showStatus('PDF download feature coming soon!');
+    }
+
+    function emailInvoice() {
+      showStatus('Email invoice feature coming soon!');
+    }
+
+    async function finalizeInvoice() {
+      const btn = document.getElementById('finalizeBtn');
       const originalText = btn.innerHTML;
       
       try {
         btn.disabled = true;
-        btn.innerHTML = '<span class="btn-icon">⏳</span> Creating Invoice...';
+        btn.innerHTML = '<span>⏳</span> Processing Invoice...';
 
-        // Prepare invoice data
+        // Collect all form data
+        const customerInfo = {
+          name: document.getElementById('customerName').value,
+          email: document.getElementById('customerEmail').value,
+          phone: document.getElementById('customerPhone').value || undefined
+        };
+
+        const billingAddress = {
+          line1: document.getElementById('billingAddress1').value,
+          city: document.getElementById('billingCity').value,
+          state: document.getElementById('billingState').value,
+          postal_code: document.getElementById('billingZip').value,
+          country: 'US'
+        };
+
+        const sameAsShipping = document.getElementById('sameAsShipping').checked;
+        const shippingAddress = sameAsShipping ? billingAddress : {
+          line1: document.getElementById('shippingAddress1').value || billingAddress.line1,
+          city: document.getElementById('shippingCity').value || billingAddress.city,
+          state: document.getElementById('shippingState').value || billingAddress.state,
+          postal_code: document.getElementById('shippingZip').value || billingAddress.postal_code,
+          country: 'US'
+        };
+
         const invoiceData = {
-          customerInfo: {
-            email: customerEmail,
-            name: customerEmail.split('@')[0] // Simple name extraction
-          },
+          customerInfo,
           products: quote.map(item => ({
             productId: item.productId,
             quantity: item.quantity,
             unitPrice: item.unitPrice
           })),
-          shippingAddress: {
-            line1: '123 Business St', // Placeholder - in real implementation, collect this
-            city: 'Business City',
-            state: 'CA',
-            postal_code: document.getElementById('zipCode').value || '90210',
-            country: 'US'
-          }
+          shippingAddress,
+          billingAddress
         };
 
         const response = await fetch('/api/create-checkout', {
@@ -1559,9 +1776,10 @@
         const data = await response.json();
 
         if (data.error) {
-          showError(`Invoice creation failed: ${data.error}`);
+          showError(`Invoice processing failed: ${data.error}`);
         } else if (data.url) {
-          showStatus('Invoice created successfully! Redirecting to payment...');
+          showStatus('Invoice created successfully! Opening payment portal...');
+          closeInvoiceModal();
           setTimeout(() => {
             window.open(data.url, '_blank');
           }, 1000);
@@ -1570,13 +1788,27 @@
         }
 
       } catch (error) {
-        console.error('Invoice creation failed:', error);
-        showError('Failed to create invoice. Please try again.');
+        console.error('Invoice processing failed:', error);
+        showError('Failed to process invoice. Please try again.');
       } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;
       }
     }
+
+    // Close modal when clicking outside
+    document.addEventListener('click', (e) => {
+      if (e.target.classList.contains('modal-overlay')) {
+        closeInvoiceModal();
+      }
+    });
+
+    // Close modal with Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.getElementById('invoiceModal').classList.contains('show')) {
+        closeInvoiceModal();
+      }
+    });
   </script>
 </body>
 </html>
