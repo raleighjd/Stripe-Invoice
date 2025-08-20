@@ -1,0 +1,282 @@
+const PRODUCTS = [
+  {
+    id: 'PROD001',
+    name: 'Premium T-Shirt - Black',
+    sku: 'TSHIRT-18500-BLACK',
+    category: 'apparel',
+    description: 'Premium cotton t-shirt with custom logo',
+    imageFile: '18500_Black_Flat_Front-01_big_back.png',
+    pricing: [
+      { minQty: 1, maxQty: 9, price: 29.99 },
+      { minQty: 10, maxQty: 49, price: 26.99 },
+      { minQty: 50, maxQty: 99, price: 23.99 },
+      { minQty: 100, maxQty: null, price: 19.99 }
+    ]
+  },
+  {
+    id: 'PROD002',
+    name: 'Premium T-Shirt - Dark Chocolate',
+    sku: 'TSHIRT-18500-CHOC',
+    category: 'apparel',
+    description: 'Premium cotton t-shirt in dark chocolate with custom logo',
+    imageFile: '18500_Dark Chocolate_Flat_Front-01_big_back.png',  // Has space in filename
+    pricing: [
+      { minQty: 1, maxQty: 9, price: 29.99 },
+      { minQty: 10, maxQty: 49, price: 26.99 },
+      { minQty: 50, maxQty: 99, price: 23.99 },
+      { minQty: 100, maxQty: null, price: 19.99 }
+    ]
+  },
+  {
+    id: 'PROD003',
+    name: 'Classic T-Shirt - Black',
+    sku: 'TSHIRT-2000-BLACK',
+    category: 'apparel',
+    description: 'Classic fit t-shirt with custom logo',
+    imageFile: '2000_black_flat_front-01_right_chest.png',
+    pricing: [
+      { minQty: 1, maxQty: 19, price: 24.99 },
+      { minQty: 20, maxQty: 99, price: 21.99 },
+      { minQty: 100, maxQty: 499, price: 18.99 },
+      { minQty: 500, maxQty: null, price: 15.99 }
+    ]
+  },
+  {
+    id: 'PROD004',
+    name: 'Classic T-Shirt - Charcoal',
+    sku: 'TSHIRT-2000-CHARCOAL',
+    category: 'apparel',
+    description: 'Classic fit charcoal t-shirt with custom logo',
+    imageFile: '2000_charcoal_flat_front-01_right_chest.png',
+    pricing: [
+      { minQty: 1, maxQty: 19, price: 24.99 },
+      { minQty: 20, maxQty: 99, price: 21.99 },
+      { minQty: 100, maxQty: 499, price: 18.99 },
+      { minQty: 500, maxQty: null, price: 15.99 }
+    ]
+  },
+  {
+    id: 'PROD005',
+    name: 'Heavy Cotton T-Shirt - Black',
+    sku: 'TSHIRT-5400-BLACK',
+    category: 'apparel',
+    description: 'Heavy cotton t-shirt with custom logo',
+    imageFile: '5400_black_flat_front-01_right_chest.png',
+    pricing: [
+      { minQty: 1, maxQty: 24, price: 19.99 },
+      { minQty: 25, maxQty: 99, price: 17.99 },
+      { minQty: 100, maxQty: 999, price: 14.99 },
+      { minQty: 1000, maxQty: null, price: 12.99 }
+    ]
+  },
+  {
+    id: 'PROD006',
+    name: 'Canvas T-Shirt - Duck Brown',
+    sku: 'CSV40-DUCKBROWN',
+    category: 'apparel',
+    description: 'Canvas v-neck t-shirt in duck brown with custom logo',
+    imageFile: 'CSV40_duckbrown_flat_front-01_right_chest.png',
+    pricing: [
+      { minQty: 1, maxQty: 49, price: 22.99 },
+      { minQty: 50, maxQty: 249, price: 19.99 },
+      { minQty: 250, maxQty: 999, price: 16.99 },
+      { minQty: 1000, maxQty: null, price: 14.99 }
+    ]
+  },
+  {
+    id: 'PROD007',
+    name: 'Safety T-Shirt - Yellow',
+    sku: 'CSV106-SAFETY',
+    category: 'apparel',
+    description: 'High visibility safety yellow t-shirt with custom logo',
+    imageFile: 'CSV106_safetyyellow_flat_front_right_chest.png',  // No -01 in this one
+    pricing: [
+      { minQty: 1, maxQty: 49, price: 18.99 },
+      { minQty: 50, maxQty: 249, price: 16.99 },
+      { minQty: 250, maxQty: 999, price: 14.99 },
+      { minQty: 1000, maxQty: null, price: 12.99 }
+    ]
+  },
+  {
+    id: 'PROD008',
+    name: 'Casual T-Shirt - Black',
+    sku: 'CT104050-BLACK',
+    category: 'apparel',
+    description: 'Casual black t-shirt with custom logo',
+    imageFile: 'CT104050_black_flat_front-01_right_chest.png',
+    pricing: [
+      { minQty: 1, maxQty: 49, price: 26.99 },
+      { minQty: 50, maxQty: 249, price: 23.99 },
+      { minQty: 250, maxQty: 999, price: 20.99 },
+      { minQty: 1000, maxQty: null, price: 17.99 }
+    ]
+  },
+  {
+    id: 'PROD009',
+    name: 'Casual T-Shirt - Carhartt Brown',
+    sku: 'CT104050-BROWN',
+    category: 'apparel',
+    description: 'Casual Carhartt brown t-shirt with custom logo',
+    imageFile: 'CT104050_carharttbrown_flat_front-01_right_chest.png',  // Note: carharttbrown is one word
+    pricing: [
+      { minQty: 1, maxQty: 49, price: 26.99 },
+      { minQty: 50, maxQty: 249, price: 23.99 },
+      { minQty: 250, maxQty: 999, price: 20.99 },
+      { minQty: 1000, maxQty: null, price: 17.99 }
+    ]
+  },
+  {
+    id: 'PROD010',
+    name: 'Fashion T-Shirt - Black',
+    sku: 'F170-BLACK',
+    category: 'apparel',
+    description: 'Fashion fit black t-shirt with custom logo',
+    imageFile: 'F170_Black_flat_front-01_big_back.png',  // Capital B in Black
+    pricing: [
+      { minQty: 1, maxQty: 49, price: 21.99 },
+      { minQty: 50, maxQty: 249, price: 19.99 },
+      { minQty: 250, maxQty: 999, price: 16.99 },
+      { minQty: 1000, maxQty: null, price: 14.99 }
+    ]
+  },
+  {
+    id: 'PROD011',
+    name: 'Heavy Blend T-Shirt - Black',
+    sku: 'G2400-BLACK',
+    category: 'apparel',
+    description: 'Heavy blend black t-shirt with custom logo',
+    imageFile: 'G2400_black_flat_front-01_big_back.png',  // Lowercase black
+    pricing: [
+      { minQty: 1, maxQty: 49, price: 23.99 },
+      { minQty: 50, maxQty: 249, price: 20.99 },
+      { minQty: 250, maxQty: 999, price: 17.99 },
+      { minQty: 1000, maxQty: null, price: 15.99 }
+    ]
+  },
+  {
+    id: 'PROD012',
+    name: 'Heavy Blend T-Shirt - Charcoal',
+    sku: 'G2400-CHARCOAL',
+    category: 'apparel',
+    description: 'Heavy blend charcoal t-shirt with custom logo',
+    imageFile: 'G2400_charcoal_flat_front-01_big_back.png',
+    pricing: [
+      { minQty: 1, maxQty: 49, price: 23.99 },
+      { minQty: 50, maxQty: 249, price: 20.99 },
+      { minQty: 250, maxQty: 999, price: 17.99 },
+      { minQty: 1000, maxQty: null, price: 15.99 }
+    ]
+  },
+  {
+    id: 'PROD013',
+    name: 'Heavy Blend T-Shirt - Dark Chocolate',
+    sku: 'G2400-DARKCHOC',
+    category: 'apparel',
+    description: 'Heavy blend dark chocolate t-shirt with custom logo',
+    imageFile: 'G2400_darkchocolate_flat_front-01_big_back.png',  // darkchocolate is one word
+    pricing: [
+      { minQty: 1, maxQty: 49, price: 23.99 },
+      { minQty: 50, maxQty: 249, price: 20.99 },
+      { minQty: 250, maxQty: 999, price: 17.99 },
+      { minQty: 1000, maxQty: null, price: 15.99 }
+    ]
+  },
+  {
+    id: 'PROD014',
+    name: 'Lightweight T-Shirt - Black',
+    sku: 'K540-BLACK',
+    category: 'apparel',
+    description: 'Lightweight black t-shirt with custom logo',
+    imageFile: 'K540_Black_Flat_Front-01_right_chest.png',
+    pricing: [
+      { minQty: 1, maxQty: 49, price: 27.99 },
+      { minQty: 50, maxQty: 249, price: 24.99 },
+      { minQty: 250, maxQty: 999, price: 21.99 },
+      { minQty: 1000, maxQty: null, price: 18.99 }
+    ]
+  },
+  {
+    id: 'PROD015',
+    name: 'Nike Dri-FIT T-Shirt - Black',
+    sku: 'NKCY9963-BLACK',
+    category: 'apparel',
+    description: 'Nike Dri-FIT performance t-shirt with custom logo',
+    imageFile: 'NKDC1963_Black_Flat_Front-01_right_chest.png',  // Note: NKDC not NKCY
+    pricing: [
+      { minQty: 1, maxQty: 24, price: 44.99 },
+      { minQty: 25, maxQty: 99, price: 40.99 },
+      { minQty: 100, maxQty: 499, price: 36.99 },
+      { minQty: 500, maxQty: null, price: 32.99 }
+    ]
+  },
+  {
+    id: 'PROD016',
+    name: 'Performance T-Shirt - Black',
+    sku: 'PC78SP-BLACK',
+    category: 'apparel',
+    description: 'Performance jet black t-shirt with custom logo',
+    imageFile: 'PC78SP_JET BLACK_Flat_Front-01_right_chest.png',  // JET BLACK with space
+    pricing: [
+      { minQty: 1, maxQty: 49, price: 31.99 },
+      { minQty: 50, maxQty: 249, price: 28.99 },
+      { minQty: 250, maxQty: 999, price: 25.99 },
+      { minQty: 1000, maxQty: null, price: 22.99 }
+    ]
+  },
+  {
+    id: 'PROD017',
+    name: 'Tri-Blend T-Shirt - Black',
+    sku: 'TL1763H-BLACK',
+    category: 'apparel',
+    description: 'Tri-blend black t-shirt with custom logo',
+    imageFile: 'TLJ763H_Black_Flat_Front-01_right_chest.png',  // Note: TLJ not TL1
+    pricing: [
+      { minQty: 1, maxQty: 49, price: 34.99 },
+      { minQty: 50, maxQty: 249, price: 31.99 },
+      { minQty: 250, maxQty: 999, price: 27.99 },
+      { minQty: 1000, maxQty: null, price: 24.99 }
+    ]
+  },
+  {
+    id: 'PROD018',
+    name: 'Tri-Blend T-Shirt - Duck Brown',
+    sku: 'TL1763H-DUCKBROWN',
+    category: 'apparel',
+    description: 'Tri-blend duck brown t-shirt with custom logo',
+    imageFile: 'TLJ763H_Duck Brown_Flat_Front-01_right_chest.png',  // Duck Brown with space
+    pricing: [
+      { minQty: 1, maxQty: 49, price: 34.99 },
+      { minQty: 50, maxQty: 249, price: 31.99 },
+      { minQty: 250, maxQty: 999, price: 27.99 },
+      { minQty: 1000, maxQty: null, price: 24.99 }
+    ]
+  },
+  {
+    id: 'PROD019',
+    name: 'Grey Steel T-Shirt - Orange Logo',
+    sku: 'C112-GREYSTEEL',
+    category: 'apparel',
+    description: 'Grey steel t-shirt with neon orange custom logo',
+    imageFile: 'C112_greysteelneonorange_full_front-01_right_chest.png',
+    pricing: [
+      { minQty: 1, maxQty: 49, price: 28.99 },
+      { minQty: 50, maxQty: 249, price: 25.99 },
+      { minQty: 250, maxQty: 999, price: 22.99 },
+      { minQty: 1000, maxQty: null, price: 19.99 }
+    ]
+  },
+  {
+    id: 'PROD020',
+    name: 'Classic Polo - Black',
+    sku: 'C932-BLACK',
+    category: 'apparel',
+    description: 'Classic black polo shirt with embroidered logo',
+    imageFile: 'C932_Black_Flat_Front-01_right_chest.png',
+    pricing: [
+      { minQty: 1, maxQty: 19, price: 39.99 },
+      { minQty: 20, maxQty: 99, price: 35.99 },
+      { minQty: 100, maxQty: 499, price: 31.99 },
+      { minQty: 500, maxQty: null, price: 27.99 }
+    ]
+  }
+];

@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Quote & Checkout</title>
+  <style>
+    :root{
+      --bg: #F6F7FB;
+      --surface: #FFFFFF;
+      --text: #0F172A;         /* slate-900 */
+      --muted: #475569;        /* slate-600 */
+      --line: #E5E7EB;         /* gray-200 */
+      --primary: #1E3A8A;      /* indigo-900 */
+      --primary-600: #2E49A6;  /* hover */
+      --accent: #0EA5E9;       /* cyan-500 (sparingly) */
+      --success: #15803D;      /* green-700 */
+      --danger: #B91C1C;       /* red-700 */
+      --radius: 12px;
+      --radius-sm: 8px;
+      --shadow: 0 10px 30px rgba(2,8,23,0.06);
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,Arial,sans-serif;
+      color:var(--text);
+      background:var(--bg);
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+
+    .wrap{max-width:1280px;margin:0 auto;padding:32px}
+
+    /* Top Bar */
+    .topbar{
+      display:flex;align-items:center;justify-content:space-between;
+      margin-bottom:24px;
+    }
+    .brand{
+      display:flex;align-items:center;gap:14px;
+    }
+    .logo{
+      width:40px;height:40px;border-radius:8px;background:var(--primary);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+    }
+    .brand h1{
+      margin:0;font-size:18px;letter-spacing:.2px;font-weight:700;color:var(--text);
+    }
+    .bar{
+      display:flex;gap:10px;align-items:center;
+    }
+    .bar input{
+      height:40px;min-width:280px;padding:0 12px;border-radius:8px;border:1px solid var(--line);
+      background:#fff;color:var(--text);
+    }
+    .btn{
+      height:40px;padding:0 16px;border-radius:8px;border:1px solid var(--line);
+      background:#fff;color:var(--primary);font-weight:600;cursor:pointer;
+    }
+    .btn:hover{border-color:#D1D5DB}
+
+    /* Layout (Amazon-like narrow checkout) */
+    .panel{
+      background:var(--surface);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      min-width: 0;              /* NEW: prevents grid overflow */
+    }
+    .grid{
+      display:grid;
+      grid-template-columns: minmax(0, 1fr) 360px; /* <— catalog expands, checkout fixed ~Amazon width */
+      gap:24px;
+      align-items: start;
+    }
+
+    /* Section headers */
+    .section-h{
+      padding:18px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;
+    }
+    .section-h h2{margin:0;font-size:16px;font-weight:800;letter-spacing:.2px}
+
+    /* Products */
+    .products{
+      padding:18px 18px 6px 18px;
+      display:grid;gap:18px;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+    }
+    .card{
+      border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff;
+      display:flex;flex-direction:column;
+      transition: box-shadow .2s ease, transform .2s ease;
+    }
+    .card:hover{box-shadow:0 10px 20px rgba(2,8,23,0.08);transform:translateY(-1px)}
+    .thumb{
+      height:180px;background:#F2F3F7;border-bottom:1px solid var(--line);
+      background-size:contain;background-repeat:no-repeat;background-position:center;
+      display:flex;align-items:center;justify-content:center;color:#94A3B8;font-size:12px;
+    }
+    .card-body{padding:14px 14px 16px}
+    .name{font-size:14px;font-weight:700;margin-bottom:6px}
+    .sku{font-size:12px;color:#64748B;margin-bottom:10px}
+    .desc{font-size:13px;color:#475569;line-height:1.4;margin-bottom:12px}
+
+    .tiers{
+      background:#F8FAFC;border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:12px;
+    }
+    .tier{
+      display:flex;justify-content:space-between;align-items:center;
+      font-size:12px;padding:6px 8px;border-radius:6px;
+    }
+    .tier.active{background:#EEF2FF;color:#111827}
+
+    .qty{
+      display:flex;align-items:center;gap:8px;margin-bottom:10px;
+    }
+    .qty input{width:80px;height:38px;border:1px solid var(--line);border-radius:8px;padding:0 8px}
+    .qty .qbtn{
+      width:38px;height:38px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font-weight:700
+    }
+    .price{font-size:14px;font-weight:800;color:var(--primary);margin-bottom:8px}
+    .save{display:inline-block;font-size:12px;color:var(--success);margin-bottom:10px}
+
+    .add{
+      height:40px;border-radius:8px;border:1px solid var(--primary);
+      background:var(--primary);color:#fff;font-weight:700;cursor:pointer;
+    }
+    .add:hover{background:var(--primary-600);border-color:var(--primary-600)}
+
+    /* Sidebar / Checkout */
+    .side{display:flex;flex-direction:column;position:sticky;top:24px}
+    .block{padding:16px;border-bottom:1px solid var(--line)}
+    .block:last-child{border-bottom:none}
+    .label{font-size:12px;color:#64748B;margin-bottom:6px;font-weight:600}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+    .input, .select{
+      height:40px;
+      border:1px solid var(--line);
+      border-radius:8px;
+      padding:0 10px;
+      font-size:14px;
+      background:#fff;
+      width: 100%;               /* NEW: fill grid cell, don’t overflow */
+      max-width: 100%;           /* NEW: belt-and-suspenders */
+    }
+    .check{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:13px;color:var(--muted)}
+
+    /* Cart list */
+    .cart{padding:14px}
+    .cart-item{
+      border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;background:#fff
+    }
+    .cart-name{font-weight:700;font-size:13px;margin-bottom:4px}
+    .cart-meta{font-size:12px;color:#64748B}
+    .rm{border:1px solid #E11D48;background:#fff;color:#E11D48;border-radius:8px;height:32px;padding:0 10px;cursor:pointer}
+    .rm:hover{background:#FEF2F2}
+
+    .totals{border-top:1px solid var(--line);padding-top:12px;margin-top:14px}
+    .line{display:flex;justify-content:space-between;font-size:13px;margin:6px 0}
+    .grand{font-weight:900;font-size:15px;color:var(--text);border-top:1px solid var(--line);padding-top:10px;margin-top:8px}
+
+    .primary{
+      margin-top:12px;height:44px;border:none;border-radius:10px;background:var(--primary);
+      color:#fff;font-weight:800;cursor:pointer
+    }
+    .primary:hover{background:var(--primary-600)}
+    .muted{font-size:12px;color:#64748B;line-height:1.4;margin-top:8px}
+
+    /* Responsive */
+    @media (max-width: 1100px){
+      .products{grid-template-columns:repeat(2,minmax(0,1fr))}
+    }
+    @media (max-width: 920px){
+      .grid{grid-template-columns:1fr}
+      .side{position:static}
+      .products{grid-template-columns:repeat(2,minmax(0,1fr))}
+    }
+    @media (max-width: 640px){
+      .products{grid-template-columns:1fr}
+      .bar input{min-width:200px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- Top Bar -->
+    <div class="topbar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <h1>Quote & Checkout</h1>
+      </div>
+      <div class="bar">
+        <input id="toolbarEmail" type="email" placeholder="Customer email for branded mockups"/>
+        <button class="btn" onclick="reloadWithEmail()">Load mockups</button>
+      </div>
+    </div>
+
+    <!-- Status -->
+    <div id="statusMsg" class="msg"></div>
+    <div id="errorMsg" class="msg"></div>
+
+    <!-- Main -->
+    <div class="grid">
+      <!-- Catalog -->
+      <div class="panel">
+        <div class="section-h"><h2>Catalog</h2></div>
+        <div id="productGrid" class="products"></div>
+      </div>
+
+      <!-- Sidebar -->
+      <div class="panel side">
+        <div class="section-h"><h2>Checkout Details</h2></div>
+
+        <div class="block">
+          <div class="label">Customer</div>
+          <div class="row">
+            <input id="customerName" class="input" placeholder="Full name *"/>
+            <input id="customerCompany" class="input" placeholder="Company"/>
+          </div>
+          <div class="row" style="margin-top:10px;">
+            <input id="customerEmail" class="input" placeholder="Email *" onblur="mirrorEmail()"/>
+            <input id="customerPhone" class="input" placeholder="Phone"/>
+          </div>
+        </div>
+
+        <div class="block">
+          <div class="label">Shipping Address *</div>
+          <div class="row">
+            <input id="ship_line1" class="input" placeholder="Address line 1"/>
+            <input id="ship_line2" class="input" placeholder="Address line 2 (optional)"/>
+          </div>
+          <div class="row-3" style="margin-top:10px;">
+            <input id="ship_city" class="input" placeholder="City"/>
+            <input id="ship_state" class="input" placeholder="State/Region"/>
+            <input id="ship_postal" class="input" placeholder="ZIP/Postal"/>
+          </div>
+          <div class="row" style="margin-top:10px;">
+            <select id="ship_country" class="select">
+              <option value="US" selected>United States</option>
+              <option value="CA">Canada</option>
+            </select>
+            <div></div>
+          </div>
+        </div>
+
+        <div class="block">
+          <div class="check">
+            <input id="bill_same" type="checkbox" checked onchange="toggleBilling()"/>
+            <label for="bill_same">Billing same as shipping</label>
+          </div>
+          <div id="billingBlock" style="display:none;margin-top:10px;">
+            <div class="label">Billing Address *</div>
+            <div class="row">
+              <input id="bill_line1" class="input" placeholder="Address line 1"/>
+              <input id="bill_line2" class="input" placeholder="Address line 2 (optional)"/>
+            </div>
+            <div class="row-3" style="margin-top:10px;">
+              <input id="bill_city" class="input" placeholder="City"/>
+              <input id="bill_state" class="input" placeholder="State/Region"/>
+              <input id="bill_postal" class="input" placeholder="ZIP/Postal"/>
+            </div>
+            <div class="row" style="margin-top:10px;">
+              <select id="bill_country" class="select">
+                <option value="US" selected>United States</option>
+                <option value="CA">Canada</option>
+              </select>
+              <div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-h"><h2>Cart</h2></div>
+        <div class="cart" id="cartItems"></div>
+
+        <div class="cart" style="padding-top:0;">
+          <button id="payBtn" class="primary" onclick="checkout()">Checkout & Pay</button>
+          <div class="muted">
+            Taxes are calculated automatically at Checkout using your shipping address and chosen shipping method.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ----- State -----
+    let products = [];
+    let cart = [];
+
+    // ----- On load -----
+    window.addEventListener('DOMContentLoaded', async () => {
+      const usp = new URLSearchParams(window.location.search);
+      if (usp.get('success')) showStatus('Payment successful.');
+      if (usp.get('canceled')) showError('Payment canceled.');
+      await loadProducts();
+      updateCartDisplay();
+      toggleBilling();
+    });
+
+    // Notices
+    function showStatus(t){ const el = document.getElementById('statusMsg'); el.textContent=t; el.className='msg ok'; }
+    function showError(t){ const el = document.getElementById('errorMsg'); el.textContent=t; el.className='msg err'; }
+
+    // Mirror email into toolbar for mockups
+    function mirrorEmail(){
+      const v = document.getElementById('customerEmail').value.trim();
+      if (v) document.getElementById('toolbarEmail').value = v;
+      loadProducts();
+    }
+    async function reloadWithEmail(){ await loadProducts(); }
+
+    // Billing toggle
+    function toggleBilling(){
+      const same = document.getElementById('bill_same').checked;
+      document.getElementById('billingBlock').style.display = same ? 'none' : 'block';
+    }
+
+    // API
+    async function loadProducts(){
+      try{
+        const email = document.getElementById('toolbarEmail').value.trim();
+        const url = email ? `/api/products?customerEmail=${encodeURIComponent(email)}` : '/api/products';
+        const r = await fetch(url);
+        products = await r.json();
+        renderProducts();
+      }catch(e){
+        console.error('Load products failed', e);
+        products = [];
+        renderProducts();
+      }
+    }
+
+    // Render catalog
+    function renderProducts(){
+      const grid = document.getElementById('productGrid');
+      grid.innerHTML = products.map(product => {
+        const bg = product.previewImageUrl ? `style="background-image:url('${product.previewImageUrl}')"` : '';
+        const tiers = (product.pricingTable||[]).map(t => `
+          <div class="tier" data-range="${t.quantity_range}">
+            <span>${t.quantity_range}</span>
+            <span>${t.price_per_unit}</span>
+          </div>`).join('');
+        return `
+          <div class="card">
+            <div class="thumb" ${bg}>${product.previewImageUrl ? '' : 'No image'}</div>
+            <div class="card-body">
+              <div class="name">${product.name}</div>
+              <div class="sku">${product.sku}</div>
+              <div class="desc">${product.description}</div>
+
+              <div class="tiers">${tiers}</div>
+
+              <div class="qty">
+                <button class="qbtn" onclick="updateQty('${product.id}', -1)">−</button>
+                <input class="input" id="qty-${product.id}" type="number" value="1" min="1" onchange="recalcCard('${product.id}')"/>
+                <button class="qbtn" onclick="updateQty('${product.id}', 1)">+</button>
+              </div>
+
+              <div class="price" id="price-${product.id}">$${(product.currentPrice||0).toFixed(2)}</div>
+              <div class="save" id="savings-${product.id}"></div>
+
+              <button class="add" onclick="addToCart('${product.id}')">Add to cart</button>
+            </div>
+          </div>`;
+      }).join('');
+      for (const p of products) recalcCard(p.id);
+    }
+
+    function updateQty(productId, delta){
+      const el = document.getElementById(`qty-${productId}`);
+      const next = Math.max(1, (parseInt(el.value||'1',10) + delta));
+      el.value = next;
+      recalcCard(productId);
+    }
+
+    function findUnitPriceLocal(product, qty){
+      const q = Number(qty||1);
+      const tier = product.pricing.find(t => q >= t.minQty && (t.maxQty===null || q <= t.maxQty));
+      return tier ? tier.price : product.pricing[0].price;
+    }
+
+    function recalcCard(productId){
+      const qty = parseInt(document.getElementById(`qty-${productId}`).value||'1',10);
+      const product = products.find(p => p.id === productId);
+      if (!product) return;
+
+      const unit = findUnitPriceLocal(product, qty);
+      const total = unit * qty;
+      document.getElementById(`price-${product.id}`).innerHTML = `$${total.toFixed(2)} ($${unit.toFixed(2)} ea)`;
+
+      const base = product.currentPrice || (product.pricing?.[0]?.price || unit);
+      const savings = qty > 1 ? (base - unit) * qty : 0;
+      document.getElementById(`savings-${product.id}`).innerHTML = savings > 0 ? `You save $${savings.toFixed(2)}` : '';
+
+      // highlight active tier
+      const card = document.querySelector(`#qty-${productId}`).closest('.card');
+      if (card){
+        card.querySelectorAll('.tier').forEach(tierEl => {
+          const range = tierEl.dataset.range;
+          const tier = product.pricing.find(x => range === `${x.minQty}-${x.maxQty}` || range === `${x.minQty}+`);
+          const active = tier && qty >= tier.minQty && (tier.maxQty===null || qty <= tier.maxQty);
+          tierEl.classList.toggle('active', !!active);
+        });
+      }
+    }
+
+    // Cart
+    function addToCart(productId){
+      const product = products.find(p => p.id === productId);
+      const qty = parseInt(document.getElementById(`qty-${productId}`).value||'1',10);
+      const existing = cart.find(i => i.productId === productId);
+      if (existing) existing.quantity += qty;
+      else cart.push({ productId, product, quantity: qty });
+      updateCartDisplay();
+      document.getElementById(`qty-${productId}`).value = 1;
+      recalcCard(productId);
+    }
+
+    function removeFromCart(productId){
+      cart = cart.filter(i => i.productId !== productId);
+      updateCartDisplay();
+    }
+
+    function updateCartDisplay(){
+      const root = document.getElementById('cartItems');
+      if (!cart.length){
+        root.innerHTML = '<div class="cart-item" style="justify-content:center;color:#64748B">Cart is empty</div>';
+        return;
+      }
+      let subtotal = 0;
+      const rows = cart.map(item => {
+        const unit = findUnitPriceLocal(item.product, item.quantity);
+        const line = unit * item.quantity;
+        subtotal += line;
+        return `
+          <div class="cart-item">
+            <div>
+              <div class="cart-name">${item.product.name}</div>
+              <div class="cart-meta">Qty ${item.quantity} × $${unit.toFixed(2)} — Line $${line.toFixed(2)}</div>
+            </div>
+            <button class="rm" onclick="removeFromCart('${item.productId}')">Remove</button>
+          </div>`;
+      }).join('');
+      root.innerHTML = `${rows}
+        <div class="totals">
+          <div class="line"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>
+          <div class="line"><span>Shipping</span><span>Selected at Checkout</span></div>
+          <div class="line"><span>Tax</span><span>Calculated at Checkout</span></div>
+          <div class="grand"><span>Estimated Total</span><span>$${subtotal.toFixed(2)} + shipping & tax</span></div>
+        </div>`;
+    }
+
+    // Address helpers
+    function gatherShipping(){
+      return {
+        line1: document.getElementById('ship_line1').value.trim(),
+        line2: document.getElementById('ship_line2').value.trim(),
+        city: document.getElementById('ship_city').value.trim(),
+        state: document.getElementById('ship_state').value.trim(),
+        postal_code: document.getElementById('ship_postal').value.trim(),
+        country: document.getElementById('ship_country').value
+      };
+    }
+    function gatherBilling(){
+      const same = document.getElementById('bill_same').checked;
+      if (same){
+        const s = gatherShipping();
+        return { ...s };
+      }
+      return {
+        line1: document.getElementById('bill_line1').value.trim(),
+        line2: document.getElementById('bill_line2').value.trim(),
+        city: document.getElementById('bill_city').value.trim(),
+        state: document.getElementById('bill_state').value.trim(),
+        postal_code: document.getElementById('bill_postal').value.trim(),
+        country: document.getElementById('bill_country').value
+      };
+    }
+
+    // Checkout
+    async function checkout(){
+      if (!cart.length) return showError('Please add products to the cart');
+
+      const customerInfo = {
+        name: document.getElementById('customerName').value.trim(),
+        company: document.getElementById('customerCompany').value.trim(),
+        email: document.getElementById('customerEmail').value.trim(),
+        phone: document.getElementById('customerPhone').value.trim()
+      };
+      if (!customerInfo.name || !customerInfo.email) return showError('Please provide name and email');
+
+      const shippingAddress = gatherShipping();
+      if (!shippingAddress.line1 || !shippingAddress.city || !shippingAddress.state || !shippingAddress.postal_code) {
+        return showError('Please complete the shipping address');
+      }
+      const billingAddress = gatherBilling();
+      if (!document.getElementById('bill_same').checked) {
+        if (!billingAddress.line1 || !billingAddress.city || !billingAddress.state || !billingAddress.postal_code) {
+          return showError('Please complete the billing address');
+        }
+      }
+
+      const payload = {
+        customerInfo,
+        products: cart.map(i => ({ productId: i.productId, quantity: i.quantity })),
+        shippingAddress,
+        billingAddress
+      };
+
+      try{
+        const btn = document.getElementById('payBtn');
+        btn.disabled = true;
+        const r = await fetch('/api/create-checkout', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
+        const data = await r.json();
+        btn.disabled = false;
+
+        if (data.url){
+          window.location = data.url;
+        } else {
+          showError(data.error || 'Failed to create payment link');
+          console.error('Checkout error:', data.details || data);
+        }
+      }catch(e){
+        document.getElementById('payBtn').disabled = false;
+        showError('Checkout error: ' + e.message);
+      }
+    }
+  </script>
+</body>
+</html>
