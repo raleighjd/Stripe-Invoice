@@ -1379,21 +1379,213 @@
 
     // Quote Management
     function updateQuoteItems() {
-      quote = [];
+        openInvoicePanel();
+      });
+
+      // Invoice Panel Functions
+      let currentStep = 1;
+      const totalSteps = 3;
+
+      function openInvoicePanel() {
+        if (quoteItems.length === 0) {
+          alert('Please add items to your quote first.');
+          return;
+        }
+        
+        const customerEmail = document.getElementById('customerEmailInput').value.trim();
+        if (customerEmail) {
+          document.getElementById('customerEmail').value = customerEmail;
+        }
+        
+        document.getElementById('invoicePanel').classList.add('active');
+        document.getElementById('panelOverlay').classList.add('active');
+        document.body.style.overflow = 'hidden';
+        
+        // Set current date and due date
+        const today = new Date();
+        const dueDate = new Date(today.getTime() + (30 * 24 * 60 * 60 * 1000)); // 30 days from now
+        
+        document.getElementById('invoiceDate').textContent = today.toLocaleDateString();
+        document.getElementById('invoiceDueDate').textContent = dueDate.toLocaleDateString();
+        
+        // Generate invoice number
+        document.getElementById('invoiceNumber').textContent = 'INV-' + Date.now().toString().slice(-6);
+      }
+
+      function closeInvoicePanel() {
+        document.getElementById('invoicePanel').classList.remove('active');
+        document.getElementById('panelOverlay').classList.remove('active');
+        document.body.style.overflow = '';
+        
+        // Reset to first step
+        currentStep = 1;
+        updateStepDisplay();
+      }
+
+      function updateStepDisplay() {
+        // Update progress steps
+        document.querySelectorAll('.step').forEach((step, index) => {
+          if (index + 1 <= currentStep) {
+            step.classList.add('active');
+          } else {
+            step.classList.remove('active');
+          }
+        });
+
+        // Update step content
+        document.querySelectorAll('.invoice-step').forEach((step, index) => {
+          if (index + 1 === currentStep) {
+            step.classList.add('active');
+          } else {
+            step.classList.remove('active');
+          }
+        });
+
+        // Update buttons
+        const prevBtn = document.getElementById('prevStepBtn');
+        const nextBtn = document.getElementById('nextStepBtn');
+        const generateBtn = document.getElementById('generateInvoiceBtn');
+
+        prevBtn.style.display = currentStep > 1 ? 'block' : 'none';
+        
+        if (currentStep < totalSteps) {
+          nextBtn.style.display = 'block';
+          generateBtn.style.display = 'none';
+        } else {
+          nextBtn.style.display = 'none';
+          generateBtn.style.display = 'block';
+          updateInvoicePreview();
+        }
+      }
+
+      function nextStep() {
+        if (currentStep < totalSteps && validateCurrentStep()) {
+          currentStep++;
+          updateStepDisplay();
+        }
+      }
+
+      function prevStep() {
+        if (currentStep > 1) {
+          currentStep--;
+          updateStepDisplay();
+        }
+      }
+
+      function validateCurrentStep() {
+        const step = document.getElementById(`step${currentStep}`);
+        const requiredFields = step.querySelectorAll('input[required], select[required]');
+        
+        for (let field of requiredFields) {
+          if (!field.value.trim()) {
+            field.focus();
+            field.style.borderColor = '#ef4444';
+            setTimeout(() => {
+              field.style.borderColor = '';
+            }, 3000);
+            return false;
+          }
+        }
+        return true;
+      }
+
+      function updateInvoicePreview() {
+        // Update customer info
+        const billTo = `
+          <strong>${document.getElementById('companyName').value}</strong><br>
+          ${document.getElementById('contactName').value}<br>
+          ${document.getElementById('billingStreet').value}<br>
+          ${document.getElementById('billingCity').value}, ${document.getElementById('billingState').value} ${document.getElementById('billingZip').value}<br>
+          ${document.getElementById('customerEmail').value}
+        `;
+        document.getElementById('billToPreview').innerHTML = billTo;
+
+        // Update shipping info
+        const sameAsbilling = document.getElementById('sameAsBinding').checked;
+        let shipTo;
+        if (sameAsBinding) {
+          shipTo = billTo;
+        } else {
+          shipTo = `
+            <strong>${document.getElementById('companyName').value}</strong><br>
+            ${document.getElementById('contactName').value}<br>
+            ${document.getElementById('shippingStreet').value}<br>
+            ${document.getElementById('shippingCity').value}, ${document.getElementById('shippingState').value} ${document.getElementById('shippingZip').value}
+          `;
+        }
+        document.getElementById('shipToPreview').innerHTML = shipTo;
+
+        // Update items
+        const itemsHtml = quoteItems.map(item => {
+          const product = products.find(p => p.id === item.productId);
+          return `
+            <tr>
+              <td>${product.name}</td>
+              <td>${product.sku}</td>
+              <td>${item.quantity}</td>
+              <td>$${item.unitPrice.toFixed(2)}</td>
+              <td>$${(item.unitPrice * item.quantity).toFixed(2)}</td>
+            </tr>
+          `;
+        }).join('');
+        document.getElementById('invoiceItemsPreview').innerHTML = itemsHtml;
+
+        // Update totals
+        const totals = calculateTotal();
+        document.getElementById('previewSubtotal').textContent = `$${totals.toFixed(2)}`;
+        document.getElementById('previewTax').textContent = `$${(totals * 0.08).toFixed(2)}`;
+        document.getElementById('previewTotal').textContent = `$${(totals * 1.08).toFixed(2)}`;
+      }
+
+      // Event Listeners
+      document.getElementById('closePanelBtn').addEventListener('click', closeInvoicePanel);
+      document.getElementById('panelOverlay').addEventListener('click', closeInvoicePanel);
+      document.getElementById('nextStepBtn').addEventListener('click', nextStep);
+      document.getElementById('prevStepBtn').addEventListener('click', prevStep);
       
-      products.forEach(product => {
-        const qty = parseInt(document.getElementById(`qty-${product.id}`).value || '0', 10);
-        if (qty > 0) {
-          const unitPrice = findUnitPrice(product, qty);
-          quote.push({
-            productId: product.id,
-            product: product,
-            quantity: qty,
-            unitPrice: unitPrice,
-            totalPrice: unitPrice * qty
+      document.getElementById('generateInvoiceBtn').addEventListener('click', function() {
+        alert('Invoice generated successfully! 🎉\n\nIn a real application, this would:\n• Generate a PDF invoice\n• Send it via email\n• Save to your records');
+        closeInvoicePanel();
+      });
+
+      // Address tabs
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const tab = this.dataset.tab;
+          
+          // Update active tab button
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          this.classList.add('active');
+          
+          // Update active tab content
+          document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
           });
+          document.getElementById(tab + 'Tab').classList.add('active');
+        });
+      });
+
+      // Same as billing toggle
+      document.getElementById('sameAsBinding').addEventListener('change', function() {
+        const shippingForm = document.getElementById('shippingForm');
+        if (this.checked) {
+          shippingForm.style.opacity = '0.5';
+          shippingForm.style.pointerEvents = 'none';
+          
+          // Copy billing to shipping
+          document.getElementById('shippingStreet').value = document.getElementById('billingStreet').value;
+          document.getElementById('shippingCity').value = document.getElementById('billingCity').value;
+          document.getElementById('shippingState').value = document.getElementById('billingState').value;
+          document.getElementById('shippingZip').value = document.getElementById('billingZip').value;
+          document.getElementById('shippingCountry').value = document.getElementById('billingCountry').value;
+        } else {
+          shippingForm.style.opacity = '';
+          shippingForm.style.pointerEvents = '';
         }
       });
+
+      // Initialize step display
+      updateStepDisplay();
 
       updateQuoteDisplay();
     }
