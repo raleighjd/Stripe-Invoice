@@ -45,34 +45,183 @@
       background: white;
       box-shadow: 0 2px 8px rgba(0,0,0,0.06);
     }
-    .brand{
-      display:flex;align-items:center;gap:16px;
+    
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(135deg, #FAFBFC 0%, #F8F9FA 100%);
     }
+    
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    
     .logo{
-     height:120px;
+      height: 80px;
       width:auto;
-     max-width:400px;
+      max-width: 200px;
       border-radius: 8px;
       object-fit: contain;
       transition: transform 0.3s ease;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
     }
     .logo:hover{
       transform: scale(1.05);
     }
+    
     .brand-text{
       display: flex;
       flex-direction: column;
+      gap: 4px;
     }
-    .brand h1{
-      margin:0;font-size:24px;letter-spacing:-0.5px;font-weight:800;color:var(--text);
-      line-height: 1.2;
+    
+    .company-name {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--text);
+      margin: 0;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #E53E3E, #C53030);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
-    .brand .tagline{
-      font-size: 13px;
+    
+    .tagline {
+      font-size: 14px;
       color: var(--muted);
-      font-weight: 500;
+      font-weight: 600;
       margin: 0;
       max-width: 400px;
+      line-height: 1.4;
+    }
+    
+    .contact-info {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      font-size: 14px;
+    }
+    
+    .contact-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+    
+    .contact-item:hover {
+      color: var(--primary);
+      transform: translateY(-1px);
+    }
+    
+    .contact-value {
+      color: var(--primary);
+      font-weight: 700;
+    }
+    
+    .main-header {
+      padding: 16px 0;
+    }
+    
+    .header-tools {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .search-section {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex: 1;
+      max-width: 600px;
+    }
+    
+    .search-container {
+      position: relative;
+      flex: 1;
+    }
+    
+    .search-input {
+      width: 100%;
+      height: 48px;
+      padding: 0 20px 0 50px;
+      border-radius: 16px;
+      border: 2px solid var(--line);
+      background: #fff;
+      font-size: 15px;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    
+    .search-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(229, 62, 62, 0.1), 0 4px 20px rgba(0,0,0,0.1);
+      outline: none;
+    }
+    
+    .search-icon {
+      position: absolute;
+      left: 18px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      font-size: 20px;
+    }
+    
+    .user-actions {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    
+    .email-input {
+      height: 48px;
+      min-width: 260px;
+      padding: 0 18px;
+      border-radius: 16px;
+      border: 2px solid var(--line);
+      background: #fff;
+      font-size: 14px;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    
+    .action-btn {
+      height: 48px;
+      padding: 0 24px;
+      border-radius: 16px;
+      border: 2px solid var(--primary);
+      background: var(--primary);
+      color: white;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 14px;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(229, 62, 62, 0.2);
+    }
+    
+    .action-btn:hover {
+      background: var(--primary-600);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 16px rgba(229, 62, 62, 0.3);
+    }
+    
+    .auth-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin: 0;
     }
 
     /* Navigation hover effects */
@@ -548,10 +697,8 @@
     <div class="header">
       <!-- Top Header Row -->
       <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line);">
-        <div style="display: flex; align-items: center; gap: 16px;">
-          <img src="images/red-long-logo.png" alt="Directum Supply Co." class="logo" id="brandLogo" style="height: 60px; max-width: 250px; object-fit: contain;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 800; color: var(--text);">Directum Supply Co.</h1>
-          <p style="margin: 0; font-size: 13px; color: var(--muted); font-weight: 500;">Premium Custom Apparel & Promotional Products, Fast & Free Shipping</p>
+        
+      </div>
         </div>
         
         <div style="display: flex; align-items: center; gap: 24px; font-size: 14px; color: var(--muted);">
@@ -567,26 +714,29 @@
         </div>
       </div>
 
-      <!-- Main Header Row -->
-      <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 0;">
-        <!-- Search and Tools -->
-        <div style="display: flex; align-items: center; gap: 16px; flex: 1; max-width: 500px;">
-          <div style="position: relative; flex: 1;">
-            <input 
-              type="text" 
-              placeholder="Search for t-shirts, hoodies, promotional items..." 
-              style="width: 100%; height: 44px; padding: 0 16px 0 44px; border-radius: 12px; border: 1px solid var(--line); background: #fff; font-size: 14px; transition: all 0.3s ease;"
-            />
-            <span style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 18px;">🔍</span>
+      <!-- Brand Section -->
+      <div class="brand-section">
+        <div class="brand">
+          <img src="images/red-long-logo.png" alt="Directum Supply Co." class="logo" id="brandLogo">
+          <div class="brand-text">
+            <h1 class="company-name">Directum Supply Co.</h1>
+            <p class="tagline">Premium Custom Apparel & Promotional Products with Fast, Free Shipping</p>
           </div>
         </div>
 
-        <!-- Right Side Tools -->
-        <div style="display: flex; align-items: center; gap: 16px;">
-          <input id="customerEmail" type="email" placeholder="Enter email for mockups" style="height: 44px; min-width: 240px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--line); background: #fff; font-size: 14px;"/>
-          <button class="btn" onclick="loadBrandedMockups()" style="white-space: nowrap;">Load Mockups</button>
-          <div style="display: flex; align-items: center; gap: 12px; margin-left: 8px;">
-            <button style="background: none; border: none; color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+        <div class="contact-info">
+          <div class="contact-item">
+            <span>📞</span>
+            <span class="contact-value">1-800-DIRECTUM</span>
+          </div>
+          <div class="contact-item">
+            <span>💬</span>
+            <span class="contact-value">Chat with Expert</span>
+          </div>
+          <div class="contact-item">
+            <span>📍</span>
+            <span>Serving Nationwide</span>
+          </div>
               👤 Sign In
             </button>
             <button style="background: none; border: none; color: var(--text); font-size: 18px; cursor: pointer; position: relative;">
@@ -625,15 +775,33 @@
 
         <div class="quote-section">
           <label style="font-size:12px;color:var(--muted);margin-bottom:8px;display:block;font-weight:600;">ZIP Code (for tax estimate)</label>
-          <input id="taxZip" class="qty-input" style="width:100%;" placeholder="Enter ZIP" onchange="calculateTax()"/>
+      </div>
         </div>
-
+      <!-- Main Header Row -->
+      <div class="main-header">
+        <div class="header-tools">
+          <div class="search-section">
+            <div class="search-container">
+              <input 
+                type="text" 
+                class="search-input"
+                placeholder="Search for t-shirts, hoodies, promotional items..."
+              />
+              <span class="search-icon">🔍</span>
+            </div>
+          </div>
         <div class="quote-section">
+          <div class="user-actions">
+            <input id="customerEmail" type="email" placeholder="Enter email for branded mockups" class="email-input"/>
+            <button class="action-btn" onclick="loadBrandedMockups()">Load Mockups</button>
+            
+            <div class="auth-actions">
+              <button style="background: none; border: none; color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 8px; transition: all 0.3s ease;" onmouseover="this.style.background='var(--primary-light)'" onmouseout="this.style.background='none'">
           <div class="quote-actions">
             <button id="checkoutBtn" class="primary-btn" onclick="proceedToCheckout()">
-              🚀 Get Final Quote & Checkout
+              <button style="background: none; border: none; color: var(--text); font-size: 20px; cursor: pointer; position: relative; padding: 10px; border-radius: 8px; transition: all 0.3s ease;" onmouseover="this.style.background='var(--primary-light)'" onmouseout="this.style.background='none'">
             </button>
-            <div class="help-text">
+                <span style="position: absolute; top: -4px; right: -4px; background: var(--primary); color: white; border-radius: 50%; width: 20px; height: 20px; font-size: 11px; display: flex; align-items: center; justify-content: center; font-weight: 700; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">0</span>
               Stripe will collect shipping details and calculate final pricing
             </div>
           </div>
