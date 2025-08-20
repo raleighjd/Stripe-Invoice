@@ -6,7 +6,7 @@ const app = express();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || '');
 
 const CONFIG = {
-  AWS_BUCKET_URL: process.env.AWS_BUCKET_URL || 'https://leadprocessor.s3.amazonaws.com',
+  AWS_BUCKET_URL: process.env.AWS_BUCKET_URL || 'https://leadprocessor.s3.us-east-2.amazonaws.com',
   PORT: process.env.PORT || 3000,
   PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || 'http://localhost:3000',
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || '',
@@ -165,7 +165,7 @@ const PRODUCTS = [
     sku: 'G2400-BLACK',
     category: 'apparel',
     description: 'Heavy blend black t-shirt with custom logo',
-    imageFile: 'G2400_black_flat_front-01_big_back.png',
+    imageFile: 'G2400_Black_flat_front-01_big_back.png',
     pricing: [
       { minQty: 1, maxQty: 49, price: 23.99 },
       { minQty: 50, maxQty: 249, price: 20.99 },
@@ -307,11 +307,15 @@ const PRODUCTS = [
 function emailToS3Folder(email) {
   return (email || '').toLowerCase().replace(/@/g, '_at_').replace(/\./g, '_dot_');
 }
+
 function getProductImageUrl(product, customerEmail) {
   const emailFolder = emailToS3Folder(customerEmail || 'default@example.com');
   const encodedFile = encodeURIComponent(product.imageFile);
-  return `${CONFIG.AWS_BUCKET_URL}/${emailFolder}/mockups/${encodedFile}`;
+  // Remove any double slashes and ensure proper URL construction
+  const baseUrl = CONFIG.AWS_BUCKET_URL.replace(/\/$/, ''); // Remove trailing slash
+  return `${baseUrl}/${emailFolder}/mockups/${encodedFile}`;
 }
+
 function calculatePrice(product, quantity) {
   const q = Math.max(1, parseInt(quantity, 10) || 1);
   const tier = product.pricing.find(

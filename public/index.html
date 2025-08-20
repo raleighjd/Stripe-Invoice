@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Directum Supply Co. - Interactive Quote</title>
-  <link rel="icon" href="data:,">
+  <link rel="icon" type="image/png" href="images/red-favicon-logo.png">
   <style>
     :root{
       --bg: #FAFBFC;
@@ -49,11 +49,15 @@
       display:flex;align-items:center;gap:16px;
     }
     .logo{
-      width:48px;height:48px;
-      background-image: url('logo.png');
-      background-size: contain;
-      background-repeat: no-repeat;
-      border-radius: 12px;
+      height:48px;
+      width:auto;
+      max-width:200px;
+      border-radius: 8px;
+      object-fit: contain;
+      transition: transform 0.3s ease;
+    }
+    .logo:hover{
+      transform: scale(1.05);
     }
     .brand-text{
       display: flex;
@@ -472,6 +476,9 @@
         gap: 16px;
         align-items: stretch;
       }
+      .brand{
+        justify-content: center;
+      }
       .tools{
         justify-content: stretch;
       }
@@ -489,7 +496,13 @@
   <div class="wrap">
     <!-- Header -->
     <div class="header">
-      <img src="logo.png" alt="Directum Supply Co." style="height: 48px; width: auto;">
+      <div class="brand">
+        <img src="images/red-long-logo.png" alt="Directum Supply Co." class="logo" id="brandLogo">
+        <div class="brand-text">
+          <h1>Directum Supply Co.</h1>
+          <p class="tagline">Premium Custom Apparel & Promotional Products</p>
+        </div>
+      </div>
       <div class="tools">
         <input id="customerEmail" type="email" placeholder="Enter customer email for branded mockups"/>
         <button class="btn" onclick="loadBrandedMockups()">Load Mockups</button>
@@ -552,6 +565,42 @@
       if (params.get('success')) showMessage('Payment completed successfully!', 'success');
       if (params.get('canceled')) showMessage('Payment was canceled.', 'error');
       
+      // Handle logo fallback with debugging
+      const logo = document.getElementById('brandLogo');
+      let logoFallbackAttempted = false;
+      
+      // Test if logo loads
+      logo.onload = function() {
+        console.log('✅ Logo loaded successfully:', this.src);
+      };
+      
+      logo.onerror = function() {
+        // Prevent infinite loop
+        if (logoFallbackAttempted) {
+          console.log('⚠️ Fallback SVG also failed, removing error handler');
+          this.onerror = null;
+          return;
+        }
+        
+        logoFallbackAttempted = true;
+        console.log('❌ Logo failed to load:', this.src);
+        console.log('🔍 Check if file exists at: /public/images/red-long-logo.png');
+        
+        // Use a simpler fallback that won't fail
+        this.style.display = 'none';
+        const fallbackText = document.createElement('div');
+        fallbackText.innerHTML = '<span style="color: #E53E3E; font-weight: 800; font-size: 18px;">Directum Supply Co.</span>';
+        this.parentNode.insertBefore(fallbackText, this.nextSibling);
+        
+        console.log('🎨 Using text fallback');
+      };
+      
+      // Test logo path immediately
+      const testImg = new Image();
+      testImg.onload = () => console.log('✅ Logo path test successful');
+      testImg.onerror = () => console.log('❌ Logo path test failed - file may not exist at: public/images/red-long-logo.png');
+      testImg.src = 'images/red-long-logo.png';
+      
       await loadProducts();
       updateQuoteDisplay();
     });
@@ -570,11 +619,27 @@
       try {
         const email = document.getElementById('customerEmail').value.trim();
         const url = email ? `/api/products?customerEmail=${encodeURIComponent(email)}` : '/api/products';
+        
+        console.log('🔄 Loading products from:', url);
+        
         const response = await fetch(url);
         products = await response.json();
+        
+        console.log('✅ Products loaded:', products.length);
+        
+        // Debug image URLs
+        if (email) {
+          console.log('🖼️ Sample image URLs:');
+          products.slice(0, 3).forEach(p => {
+            console.log(`- ${p.name}: ${p.previewImageUrl}`);
+          });
+        } else {
+          console.log('ℹ️ No email provided - using fallback images');
+        }
+        
         renderProducts();
       } catch (error) {
-        console.error('Failed to load products:', error);
+        console.error('❌ Failed to load products:', error);
         showMessage('Failed to load products: ' + error.message, 'error');
       }
     }
@@ -599,8 +664,8 @@
 
         return `
           <div class="product-card">
-            <div class="product-image" ${imageStyle}>
-              ${product.previewImageUrl ? '' : 'Image Preview'}
+            <div class="product-image" ${imageStyle} data-product-id="${product.id}">
+              ${product.previewImageUrl ? '' : '📷 No Preview'}
             </div>
             <div class="product-info">
               <div class="product-name">${product.name}</div>
@@ -617,7 +682,7 @@
               </div>
               
               <div class="product-price" id="price-${product.id}">
-                Starting at $${(product.currentPrice || 0).toFixed(2)}
+                Starting at ${(product.currentPrice || 0).toFixed(2)}
               </div>
               <div class="savings-badge" id="savings-${product.id}" style="display:none;"></div>
             </div>
@@ -627,6 +692,30 @@
 
       // Initialize pricing for all products
       products.forEach(product => updateProductPricing(product.id));
+      
+      // Add image error handling for product images
+      setTimeout(() => {
+        products.forEach(product => {
+          if (product.previewImageUrl) {
+            const testImg = new Image();
+            testImg.onload = () => {
+              console.log(`✅ Product image loaded: ${product.name}`);
+            };
+            testImg.onerror = () => {
+              console.log(`❌ Product image failed: ${product.name} - ${product.previewImageUrl}`);
+              // Update the product card to show error state
+              const productImage = document.querySelector(`[data-product-id="${product.id}"]`);
+              if (productImage) {
+                productImage.style.backgroundImage = 'none';
+                productImage.innerHTML = '❌ Image Failed';
+                productImage.style.color = '#E53E3E';
+                productImage.style.fontWeight = '600';
+              }
+            };
+            testImg.src = product.previewImageUrl;
+          }
+        });
+      }, 500);
     }
 
     // Quantity controls
