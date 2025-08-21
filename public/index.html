@@ -1,240 +1,944 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Directum Supply Co — Quote</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Directum Supply Co. - Interactive Quote</title>
+  <link rel="icon" type="image/png" href="images/red-favicon-logo.png">
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; background:#fafafa; color:#111; }
-    header { padding:16px 20px; display:flex; gap:12px; align-items:center; background:#fff; border-bottom:1px solid #eee; position:sticky; top:0; z-index:10; }
-    header input, header button { font-size:14px; padding:8px 10px; }
-    header input { border:1px solid #ccc; border-radius:6px; min-width:240px; }
-    header button { border:0; background:#111; color:#fff; border-radius:6px; cursor:pointer; }
-    #message { padding:8px 20px; font-size:13px; }
-    .container { display:grid; grid-template-columns: minmax(0,1fr) 360px; gap:20px; padding:20px; }
-    #productGrid { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:16px; }
-    .product-card { background:#fff; border:1px solid #eee; border-radius:12px; overflow:hidden; display:flex; flex-direction:column; }
-    .product-image { width:100%; padding-top:100%; background:#f3f3f3 center/contain no-repeat; }
-    .product-info { padding:12px; display:flex; flex-direction:column; gap:8px; }
-    .product-name { font-weight:600; }
-    .product-sku { color:#666; font-size:12px; }
-    .pricing-tiers { display:grid; grid-template-columns: 1fr auto; gap:4px 10px; font-size:12px; }
-    .quantity-controls { display:flex; align-items:center; gap:8px; }
-    .qty-btn { width:28px; height:28px; border-radius:6px; border:1px solid #ddd; background:#fff; cursor:pointer; }
-    .qty-input { width:64px; padding:6px 8px; border-radius:6px; border:1px solid #ddd; }
-    .action-row { display:flex; gap:8px; flex-wrap:wrap; }
-    .action-row button { font-size:12px; padding:6px 8px; border:1px solid #ddd; background:#fff; border-radius:6px; cursor:pointer; }
-    aside { background:#fff; border:1px solid #eee; border-radius:12px; padding:12px; height:fit-content; position:sticky; top:80px; }
-    .quote-item { border-top:1px dashed #eee; padding:8px 0; font-size:14px; }
-    .totals { border-top:2px solid #111; margin-top:8px; padding-top:8px; }
-    .muted { color:#666; }
+    :root{
+      --bg: #FAFBFC;
+      --surface: #FFFFFF;
+      --text: #1A202C;         
+      --muted: #4A5568;        
+      --line: #E2E8F0;         
+      --primary: #E53E3E;      /* Directum red */
+      --primary-600: #C53030;  
+      --primary-light: #FED7D7;
+      --accent: #38A169;       /* Green for savings */
+      --success: #38A169;      
+      --danger: #E53E3E;       
+      --radius: 16px;
+      --radius-sm: 12px;
+      --shadow: 0 4px 20px rgba(0,0,0,0.08);
+      --shadow-lg: 0 10px 40px rgba(0,0,0,0.12);
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Inter',Arial,sans-serif;
+      color:var(--text);
+      background:var(--bg);
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      line-height: 1.6;
+    }
+
+    .wrap{max-width:1400px;margin:0 auto;padding:24px}
+
+    /* Header */
+    .header{
+      margin-bottom:32px;
+      border-bottom: 2px solid var(--line);
+      background: white;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    
+    .logo{
+      height: 80px;
+      width:auto;
+      max-width: 200px;
+      border-radius: 8px;
+      object-fit: contain;
+      transition: transform 0.3s ease;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+    }
+    .logo:hover{
+      transform: scale(1.05);
+    }
+    
+    .tools input:focus, #customerEmail:focus{
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(229, 62, 62, 0.1);
+      outline: none;
+    }
+    .btn{
+      height:44px;padding:0 20px;border-radius:12px;border:1px solid var(--line);
+      background:#fff;color:var(--primary);font-weight:600;cursor:pointer;
+      transition: all 0.3s ease;
+      font-size: 14px;
+    }
+    .btn:hover{
+      border-color:var(--primary);
+      background: var(--primary-light);
+      transform: translateY(-1px);
+    }
+    /* Layout */
+    .main{
+      display:grid;
+      grid-template-columns: 1fr 380px;
+      gap:32px;
+      align-items: start;
+    }
+    .panel{
+      background:var(--surface);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow: hidden;
+    }
+
+    /* Section headers */
+    .section-header{
+      padding:24px 24px 20px;
+      border-bottom:1px solid var(--line);
+      background: linear-gradient(135deg, #FAFBFC 0%, #F7FAFC 100%);
+    }
+    .section-header h2{
+      margin:0;font-size:18px;font-weight:700;letter-spacing:-0.3px;
+      color: var(--text);
+    }
+    .section-header p{
+      margin: 8px 0 0;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    /* Products Grid */
+    .products{
+      padding:24px;
+      display:grid;gap:24px;
+      grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));
+    }
+    .product-card{
+      border:1px solid var(--line);
+      border-radius:var(--radius-sm);
+      overflow:hidden;
+      background:#fff;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+    }
+    .product-card:hover{
+      box-shadow: var(--shadow-lg);
+      transform: translateY(-4px);
+      border-color: rgba(229, 62, 62, 0.2);
+    }
+
+    .product-image{
+      height:240px;
+      background:#F8F9FA;
+      border-bottom:1px solid var(--line);
+      background-size:cover;
+      background-repeat:no-repeat;
+      background-position:center;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:#9CA3AF;
+      font-size:14px;
+      position: relative;
+      overflow: hidden;
+    }
+    .product-image::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(135deg, rgba(229, 62, 62, 0.05), transparent);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .product-card:hover .product-image::after {
+      opacity: 1;
+    }
+
+    .product-info{
+      padding:20px;
+    }
+    .product-name{
+      font-size:16px;
+      font-weight:700;
+      margin-bottom:6px;
+      color: var(--text);
+      line-height: 1.3;
+    }
+    .product-sku{
+      font-size:12px;
+      color:var(--muted);
+      margin-bottom:12px;
+      font-family: 'SF Mono', Monaco, monospace;
+      background: #F7FAFC;
+      padding: 4px 8px;
+      border-radius: 6px;
+      display: inline-block;
+    }
+    .product-desc{
+      font-size:14px;
+      color:var(--muted);
+      line-height:1.5;
+      margin-bottom:16px;
+    }
+
+    /* Pricing Tiers */
+    .pricing-tiers{
+      background:#F8FAFC;
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:12px;
+      margin-bottom:16px;
+    }
+    .pricing-tier{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      font-size:13px;
+      padding:8px 12px;
+      border-radius:8px;
+      transition: all 0.3s ease;
+      font-weight: 500;
+    }
+    .pricing-tier.active{
+      background: linear-gradient(135deg, #FED7D7, #FEB2B2);
+      color: #742A2A;
+      font-weight: 600;
+      transform: scale(1.02);
+      box-shadow: 0 2px 8px rgba(229, 62, 62, 0.2);
+    }
+
+    /* Quantity Controls */
+    .quantity-controls{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      margin-bottom:16px;
+    }
+    .qty-btn{
+      width:40px;
+      height:40px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      background:#fff;
+      cursor:pointer;
+      font-weight:700;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+    .qty-btn:hover{
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+      transform: scale(1.1);
+    }
+    .qty-input{
+      width:80px;
+      height:40px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:0 12px;
+      text-align: center;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+    .qty-input:focus{
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(229, 62, 62, 0.1);
+      outline: none;
+    }
+
+    .product-price{
+      font-size:16px;
+      font-weight:800;
+      color:var(--primary);
+      margin-bottom:8px;
+    }
+    .savings-badge{
+      display:inline-block;
+      font-size:12px;
+      color:var(--accent);
+      background: #F0FFF4;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+      margin-bottom:12px;
+    }
+
+    /* Quote Sidebar */
+    .quote-sidebar{
+      position:sticky;
+      top:24px;
+    }
+    .quote-section{
+      padding:20px;
+      border-bottom:1px solid var(--line);
+    }
+    .quote-section:last-child{
+      border-bottom:none;
+    }
+
+    .quote-items{
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .quote-item{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:12px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      margin-bottom:12px;
+      background:#fff;
+      transition: all 0.3s ease;
+    }
+    .quote-item:hover{
+      transform: translateX(-4px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .item-info{
+      flex: 1;
+    }
+    .item-name{
+      font-weight:600;
+      font-size:14px;
+      margin-bottom:4px;
+    }
+    .item-details{
+      font-size:12px;
+      color:var(--muted);
+    }
+    .remove-btn{
+      padding: 6px 12px;
+      border:1px solid #E53E3E;
+      background:#fff;
+      color:#E53E3E;
+      border-radius:8px;
+      cursor:pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+    .remove-btn:hover{
+      background:#FED7D7;
+      transform: scale(1.05);
+    }
+
+    .quote-totals{
+      border-top:1px solid var(--line);
+      padding-top:16px;
+      margin-top:16px;
+    }
+    .total-line{
+      display:flex;
+      justify-content:space-between;
+      font-size:14px;
+      margin:8px 0;
+      font-weight: 500;
+    }
+    .grand-total{
+      font-weight:800;
+      font-size:18px;
+      color:var(--text);
+      border-top:1px solid var(--line);
+      padding-top:12px;
+      margin-top:12px;
+    }
+
+    .quote-actions{
+      margin-top:20px;
+    }
+    .primary-btn{
+      width: 100%;
+      height:48px;
+      border:none;
+      border-radius:12px;
+      background:var(--primary);
+      color:#fff;
+      font-weight:700;
+      cursor:pointer;
+      font-size: 16px;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .primary-btn::before{
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      background: rgba(255,255,255,0.2);
+      transition: all 0.4s ease;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+    }
+    .primary-btn:hover::before{
+      width: 300px;
+      height: 300px;
+    }
+    .primary-btn:hover{
+      background: var(--primary-600);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(229, 62, 62, 0.3);
+    }
+
+    .help-text{
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.4;
+      margin-top:12px;
+      text-align: center;
+    }
+
+    /* Status Messages */
+    .message{
+      padding: 16px 20px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+      font-size: 14px;
+      line-height: 1.5;
+      font-weight: 500;
+    }
+    .message.success{
+      background: #F0FFF4;
+      color: #22543D;
+      border: 1px solid #9AE6B4;
+    }
+    .message.error{
+      background: #FED7D7;
+      color: #742A2A;
+      border: 1px solid #FEB2B2;
+    }
+
+    /* Empty States */
+    .empty-state{
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--muted);
+    }
+    .empty-state h3{
+      margin: 0 0 8px;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .empty-state p{
+      margin: 0;
+      font-size: 14px;
+    }
+
+    /* Responsive */
+    @media (max-width: 1200px){
+      .products{
+        grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
+      }
+    }
+    @media (max-width: 1024px){
+      .main{
+        grid-template-columns:1fr;
+      }
+      .quote-sidebar{
+        position:static;
+      }
+    }
+    @media (max-width: 768px){
+      .products{
+        grid-template-columns:1fr;
+      }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <strong>Quote Builder</strong>
-    <input id="customerEmail" placeholder="customer email (for S3 path)" />
-    <input id="logoUrl" placeholder="logo URL (PNG with transparency best)" />
-    <button onclick="loadProducts()">Reload Products</button>
-    <div id="message"></div>
-  </header>
+  <!-- Promotional Banner -->
+  <div style="background: linear-gradient(135deg, #E53E3E, #C53030); color: white; text-align: center; padding: 12px 0; font-size: 14px; font-weight: 600;">
+    🔥 Premium Custom Apparel with Fast Turnaround - Get Your Quote Today! 
+    <a href="#" style="color: white; text-decoration: underline; margin-left: 12px; font-weight: 700;">Get Started</a>
+  </div>
 
-  <div class="container">
-    <main>
-      <div id="productGrid"></div>
-    </main>
-
-    <aside>
-      <h3>Quote</h3>
-      <div id="quoteList"></div>
-      <div class="totals">
-        <div><strong>Subtotal:</strong> $<span id="subtotal">0.00</span></div>
-        <div class="muted">Tax/shipping calculated at checkout</div>
+  <div class="wrap">
+    <!-- Header -->
+    <div class="header">
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 20px 0; text-align: left; padding-left: 40px;">
+        <img src="images/red-long-logo.png" alt="Directum Supply Co." class="logo" id="brandLogo">
+        <div style="display: flex; align-items: center; gap: 24px; font-size: 14px; color: var(--muted);">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            📞 <span style="color: var(--primary); font-weight: 600;">Call Sales: 1-800-DIRECTUM</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            💬 <span style="color: var(--primary); font-weight: 600; cursor: pointer;">Chat with Expert</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            📍 <span>Serving Nationwide</span>
+          </div>
+        </div>
       </div>
-    </aside>
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-top: 1px solid var(--line);">
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <input type="search" placeholder="Search products..." style="height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); width: 300px;"/>
+        </div>
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <input id="customerEmail" type="email" placeholder="Enter email for branded mockups" style="height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line);"/>
+          <button class="btn" onclick="loadBrandedMockups()">Load Mockups</button>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <button style="background: none; border: none; color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer;">
+              👤 Sign In
+            </button>
+            <button style="background: none; border: none; color: var(--text); font-size: 18px; cursor: pointer; position: relative;">
+              🛒
+              <span style="position: absolute; top: -8px; right: -8px; background: var(--primary); color: white; border-radius: 50%; width: 18px; height: 18px; font-size: 10px; display: flex; align-items: center; justify-content: center; font-weight: 600;">0</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Messages -->
+    <div id="statusMessage" class="message" style="display:none;"></div>
+
+    <!-- Main Content -->
+    <div class="main">
+      <!-- Product Catalog -->
+      <div class="panel">
+        <div class="section-header">
+          <h2>Product Catalog</h2>
+          <p>Select quantities to build your custom quote</p>
+        </div>
+        <div id="productGrid" class="products"></div>
+      </div>
+
+      <!-- Quote Sidebar -->
+      <div class="panel quote-sidebar">
+        <div class="section-header">
+          <h2>Your Quote</h2>
+          <p>Live pricing updates as you select</p>
+        </div>
+        
+        <div class="quote-section">
+          <div id="quoteItems" class="quote-items"></div>
+        </div>
+
+        <div class="quote-section">
+          <label style="font-size:12px;color:var(--muted);margin-bottom:8px;display:block;font-weight:600;">ZIP Code (for tax estimate)</label>
+          <input id="taxZip" type="text" placeholder="Enter ZIP code" style="width:100%;height:40px;padding:0 12px;border-radius:8px;border:1px solid var(--line);margin-top:8px;" oninput="calculateTax()"/>
+        </div>
+        
+        <div class="quote-section">
+          <div class="quote-actions">
+            <button id="checkoutBtn" class="primary-btn" onclick="proceedToCheckout()">
+              🚀 Get Final Quote & Checkout
+            </button>
+            <div class="help-text">
+              Stripe will collect shipping details and calculate final pricing
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
+    // State
     let products = [];
-    let quote = []; // { productId, name, unitPrice, quantity, totalPrice }
+    let quote = [];
+    let taxAmount = 0;
 
-    function showMessage(msg, type='info') {
-      const el = document.getElementById('message');
-      el.textContent = msg || '';
-      el.style.color = type === 'error' ? '#c00' : '#111';
+    // Initialize
+    window.addEventListener('DOMContentLoaded', async () => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('success')) showMessage('Payment completed successfully!', 'success');
+      if (params.get('canceled')) showMessage('Payment was canceled.', 'error');
+      
+      // Handle logo fallback with debugging
+      const logo = document.getElementById('brandLogo');
+      let logoFallbackAttempted = false;
+      
+      // Test if logo loads
+      logo.onload = function() {
+        console.log('✅ Logo loaded successfully:', this.src);
+      };
+      
+      logo.onerror = function() {
+        // Prevent infinite loop
+        if (logoFallbackAttempted) {
+          console.log('⚠️ Fallback SVG also failed, removing error handler');
+          this.onerror = null;
+          return;
+        }
+        
+        logoFallbackAttempted = true;
+        console.log('❌ Logo failed to load:', this.src);
+        console.log('🔍 Check if file exists at: /public/images/red-long-logo.png');
+        
+        // Use a simpler fallback that won't fail
+        this.style.display = 'none';
+        const fallbackText = document.createElement('div');
+        fallbackText.innerHTML = '<span style="color: #E53E3E; font-weight: 800; font-size: 18px;">Directum Supply Co.</span>';
+        this.parentNode.insertBefore(fallbackText, this.nextSibling);
+        
+        console.log('🎨 Using text fallback');
+      };
+      
+      // Test logo path immediately
+      const testImg = new Image();
+      testImg.onload = () => console.log('✅ Logo path test successful');
+      testImg.onerror = () => console.log('❌ Logo path test failed - file may not exist at: public/images/red-long-logo.png');
+      testImg.src = 'images/red-long-logo.png';
+      
+      await loadProducts();
+      updateQuoteDisplay();
+    });
+
+    // Messages
+    function showMessage(text, type = 'success') {
+      const el = document.getElementById('statusMessage');
+      el.textContent = text;
+      el.className = `message ${type}`;
+      el.style.display = 'block';
+      setTimeout(() => el.style.display = 'none', 5000);
     }
 
+    // Load products
     async function loadProducts() {
       try {
         const email = document.getElementById('customerEmail').value.trim();
         const url = email ? `/api/products?customerEmail=${encodeURIComponent(email)}` : '/api/products';
-
-        const resp = await fetch(url);
-        const payload = await resp.json();
-
-        // accept {products:[...]} or [...]
-        products = Array.isArray(payload) ? payload : (payload.products || []);
-        renderProducts(products);
-        showMessage(`Loaded ${products.length} products`);
-      } catch (err) {
-        console.error('loadProducts error:', err);
-        showMessage('Could not load products.', 'error');
-        products = [];
-        renderProducts(products);
+        
+        console.log('🔄 Loading products from:', url);
+        
+        const response = await fetch(url);
+        products = await response.json();
+        
+        console.log('✅ Products loaded:', products.length);
+        
+        // Debug image URLs
+        if (email) {
+          console.log('🖼️ Sample image URLs:');
+          products.slice(0, 3).forEach(p => {
+            console.log(`- ${p.name}: ${p.previewImageUrl}`);
+          });
+        } else {
+          console.log('ℹ️ No email provided - using fallback images');
+        }
+        
+        renderProducts();
+      } catch (error) {
+        console.error('❌ Failed to load products:', error);
+        showMessage('Failed to load products: ' + error.message, 'error');
       }
     }
 
-    function priceFor(product, qty) {
-      const q = Math.max(1, parseInt(qty,10)||1);
-      const tier = (product.pricing||[]).find(p => q >= p.minQty && (p.maxQty===null || q <= p.maxQty));
-      return tier ? tier.price : (product.pricing?.[0]?.price || 0);
+    async function loadBrandedMockups() {
+      await loadProducts();
     }
 
-    function adjustQuantity(pid, delta) {
-      const input = document.getElementById(`qty-${pid}`);
-      const next = Math.max(0, (parseInt(input.value,10)||0) + delta);
-      input.value = next;
-      updateProductPricing(pid);
+    // Render products
+    function renderProducts(products) {
+  // Pick a container (adjust the selector to your page if needed)
+  const container =
+    document.querySelector('#productGrid') ||
+    document.querySelector('#productsGrid') ||
+    document.querySelector('#products-grid') ||
+    document.querySelector('#products') ||
+    document.body;
+
+  // Build the cards
+  const html = (products || []).map(product => {
+    const imageUrl = product.previewImageUrl || product.baseImageUrl || '';
+    const price = typeof product.currentPrice === 'number'
+      ? `$${product.currentPrice.toFixed(2)}`
+      : '';
+
+    return `
+      <div class="product-card" data-product-id="${product.id}">
+        <div class="product-image"
+             style="background-image:url('${imageUrl}');"
+             role="img"
+             aria-label="${(product.name || 'Product').replace(/"/g, '&quot;')}">
+        </div>
+        <div class="product-info">
+          <div class="product-title">${product.name || ''}</div>
+          <div class="product-sku">${product.sku || ''}</div>
+          <div class="product-price">${price}</div>
+          <button class="add-to-cart" data-product-id="${product.id}">Add to cart</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = html;
+
+  // After rendering, verify images and fall back if needed
+  // (background-image doesn't emit onerror, so we preload each src and swap if it fails)
+  setTimeout(() => {
+    (products || []).forEach(product => {
+      const urlToTry = product.previewImageUrl || product.baseImageUrl;
+      if (!urlToTry) return;
+
+      const testImg = new Image();
+      testImg.onload = () => {
+        // Optional: mark loaded state
+        const card = container.querySelector(`[data-product-id="${product.id}"] .product-image`);
+        if (card) card.classList.add('loaded');
+      };
+      testImg.onerror = () => {
+        // Switch card background to base image on error
+        const card = container.querySelector(`[data-product-id="${product.id}"] .product-image`);
+        if (card && product.baseImageUrl) {
+          card.style.backgroundImage = `url('${product.baseImageUrl}')`;
+        }
+      };
+      testImg.src = urlToTry;
+    });
+  }, 0);
+
+  // (Optional) wire up add-to-cart buttons if your page expects it
+  container.querySelectorAll('.add-to-cart').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-product-id');
+      // TODO: integrate with your existing add-to-cart logic
+      console.log('Add to cart:', id);
+    });
+  });
+}
+
+    // Quantity controls
+    function adjustQuantity(productId, delta) {
+      const input = document.getElementById(`qty-${productId}`);
+      const newValue = Math.max(0, parseInt(input.value || '0') + delta);
+      input.value = newValue;
+      updateProductPricing(productId);
       updateQuote();
     }
 
-    function updateProductPricing(pid) {
-      const p = products.find(x => x.id === pid);
-      const qty = Math.max(0, parseInt(document.getElementById(`qty-${pid}`).value,10)||0);
-      const priceEl = document.getElementById(`price-${pid}`);
-      const savingEl = document.getElementById(`savings-${pid}`);
+    // Calculate unit price locally
+    function calculateUnitPrice(product, quantity) {
+      const qty = parseInt(quantity) || 0;
+      if (qty === 0) return product.currentPrice || 0;
+      
+      const tier = product.pricing.find(p => 
+        qty >= p.minQty && (p.maxQty === null || qty <= p.maxQty)
+      );
+      return tier ? tier.price : product.pricing[0].price;
+    }
 
-      if (!p) return;
-      if (qty === 0) {
-        priceEl.textContent = `Starting at $${(p.currentPrice || p.pricing?.[0]?.price || 0).toFixed(2)}`;
-        savingEl.style.display = 'none';
+    // Update product pricing display
+    function updateProductPricing(productId) {
+      const product = products.find(p => p.id === productId);
+      if (!product) return;
+
+      const quantity = parseInt(document.getElementById(`qty-${productId}`).value || '0');
+      const priceEl = document.getElementById(`price-${product.id}`);
+      const savingsEl = document.getElementById(`savings-${product.id}`);
+
+      if (quantity === 0) {
+        priceEl.textContent = `Starting at $${(product.currentPrice || 0).toFixed(2)}`;
+        savingsEl.style.display = 'none';
         return;
       }
-      const unit = priceFor(p, qty);
-      const total = unit * qty;
-      const base = p.pricing?.[0]?.price || unit;
-      const savings = Math.max(0, (base - unit) * qty);
 
-      priceEl.textContent = `Qty ${qty} • $${unit.toFixed(2)} ea • $${total.toFixed(2)} total`;
-      if (savings > 0.009) {
-        savingEl.style.display = '';
-        savingEl.textContent = `You save $${savings.toFixed(2)} vs 1-pc price`;
+      const unitPrice = calculateUnitPrice(product, quantity);
+      const totalPrice = unitPrice * quantity;
+      priceEl.textContent = `$${totalPrice.toFixed(2)} ($${unitPrice.toFixed(2)} each)`;
+
+      // Show savings
+      const basePrice = product.currentPrice || product.pricing[0].price;
+      const savings = quantity > 1 ? (basePrice - unitPrice) * quantity : 0;
+      if (savings > 0) {
+        savingsEl.textContent = `Save $${savings.toFixed(2)}`;
+        savingsEl.style.display = 'inline-block';
       } else {
-        savingEl.style.display = 'none';
+        savingsEl.style.display = 'none';
       }
-    }
 
-    function renderProducts(list) {
-      const grid = document.getElementById('productGrid');
-      grid.innerHTML = list.map(product => {
-        const imageUrl = product.previewImageUrl || product.baseImageUrl || '';
-        const imageStyle = imageUrl ? `style="background-image:url('${imageUrl}')" ` : '';
-        const tiers = (product.pricingTable || []).map(tier => `
-          <div class="pricing-tier" data-range="${tier.quantity_range}">
-            <span>${tier.quantity_range}</span>
-            <span>${tier.price_per_unit}</span>
-          </div>
-        `).join('');
-
-        return `
-          <div class="product-card">
-            <div class="product-image" ${imageStyle} data-product-id="${product.id}">${imageUrl ? '' : '📷'}</div>
-            <div class="product-info">
-              <div class="product-name">${product.name}</div>
-              <div class="product-sku">${product.sku}</div>
-              <div class="product-desc">${product.description || ''}</div>
-              <div class="pricing-tiers">${tiers}</div>
-
-              <div class="quantity-controls">
-                <button class="qty-btn" onclick="adjustQuantity('${product.id}', -1)">−</button>
-                <input class="qty-input" id="qty-${product.id}" type="number" value="0" min="0"
-                       onchange="updateProductPricing('${product.id}'); updateQuote()" />
-                <button class="qty-btn" onclick="adjustQuantity('${product.id}', 1)">+</button>
-              </div>
-              <div class="product-price" id="price-${product.id}">
-                Starting at $${(product.currentPrice || (product.pricing?.[0]?.price ?? 0)).toFixed(2)}
-              </div>
-              <div class="savings-badge" id="savings-${product.id}" style="display:none;"></div>
-
-              <div class="action-row">
-                <button onclick="runMockup('${product.id}')">Mockup & Upload</button>
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('');
-
-      // verify images and fall back to base if preview fails
-      setTimeout(() => {
-        list.forEach(product => {
-          const tryUrl = product.previewImageUrl || product.baseImageUrl;
-          if (!tryUrl) return;
-          const testImg = new Image();
-          testImg.onerror = () => {
-            const card = document.querySelector(`[data-product-id="${product.id}"]`);
-            if (card && product.baseImageUrl) {
-              card.style.backgroundImage = `url('${product.baseImageUrl}')`;
-            }
-          };
-          testImg.src = tryUrl;
+      // Highlight active tier
+      const card = document.getElementById(`qty-${productId}`).closest('.product-card');
+      card.querySelectorAll('.pricing-tier').forEach(tierEl => {
+        const range = tierEl.dataset.range;
+        const tier = product.pricing.find(p => {
+          const tierRange = p.maxQty ? `${p.minQty}-${p.maxQty}` : `${p.minQty}+`;
+          return range === tierRange;
         });
-      }, 0);
+        const isActive = tier && quantity >= tier.minQty && (tier.maxQty === null || quantity <= tier.maxQty);
+        tierEl.classList.toggle('active', isActive);
+      });
     }
 
+    // Update quote
     function updateQuote() {
       quote = [];
-      products.forEach(p => {
-        const qty = Math.max(0, parseInt(document.getElementById(`qty-${p.id}`).value,10)||0);
-        if (!qty) return;
-        const unit = priceFor(p, qty);
-        quote.push({
-          productId: p.id,
-          name: p.name,
-          unitPrice: unit,
-          quantity: qty,
-          totalPrice: unit * qty
-        });
+      products.forEach(product => {
+        const quantity = parseInt(document.getElementById(`qty-${product.id}`).value || '0');
+        if (quantity > 0) {
+          quote.push({
+            productId: product.id,
+            product: product,
+            quantity: quantity,
+            unitPrice: calculateUnitPrice(product, quantity),
+            totalPrice: calculateUnitPrice(product, quantity) * quantity
+          });
+        }
       });
+      updateQuoteDisplay();
+      calculateTax();
+    }
 
-      const list = document.getElementById('quoteList');
-      list.innerHTML = quote.map(item => `
+    // Update quote display
+    function updateQuoteDisplay() {
+      const container = document.getElementById('quoteItems');
+      
+      if (quote.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <h3>No items selected</h3>
+            <p>Adjust quantities above to build your quote</p>
+          </div>
+        `;
+        return;
+      }
+
+      const subtotal = quote.reduce((sum, item) => sum + item.totalPrice, 0);
+      
+      const itemsHtml = quote.map(item => `
         <div class="quote-item">
-          <div><strong>${item.name}</strong></div>
-          <div class="item-details">Qty ${item.quantity} × $${item.unitPrice.toFixed(2)} = $${item.totalPrice.toFixed(2)}</div>
+          <div class="item-info">
+            <div class="item-name">${item.product.name}</div>
+            <div class="item-details">Qty ${item.quantity} × $${item.unitPrice.toFixed(2)} = $${item.totalPrice.toFixed(2)}</div>
+          </div>
+          <button class="remove-btn" onclick="removeFromQuote('${item.productId}')">Remove</button>
         </div>
       `).join('');
 
-      const subtotal = quote.reduce((s, i) => s + i.totalPrice, 0);
-      document.getElementById('subtotal').textContent = subtotal.toFixed(2);
+      container.innerHTML = `
+        ${itemsHtml}
+        <div class="quote-totals">
+          <div class="total-line">
+            <span>Subtotal</span>
+            <span>$${subtotal.toFixed(2)}</span>
+          </div>
+          <div class="total-line">
+            <span>Shipping</span>
+            <span>Calculated at checkout</span>
+          </div>
+          <div class="total-line">
+            <span>Tax</span>
+            <span>${taxAmount > 0 ? '$' + taxAmount.toFixed(2) + ' (estimate)' : 'Calculated at checkout'}</span>
+          </div>
+          <div class="grand-total">
+            <span>Quote Total</span>
+            <span>$${(subtotal + taxAmount).toFixed(2)}${taxAmount === 0 ? ' + tax & shipping' : ' + shipping'}</span>
+          </div>
+        </div>
+      `;
     }
 
-    async function runMockup(productId) {
+    // Remove from quote
+    function removeFromQuote(productId) {
+      document.getElementById(`qty-${productId}`).value = '0';
+      updateProductPricing(productId);
+      updateQuote();
+    }
+
+    // Tax calculation
+    async function calculateTax() {
+      const zip = document.getElementById('taxZip').value.trim();
+      if (!zip || quote.length === 0) {
+        taxAmount = 0;
+        updateQuoteDisplay();
+        return;
+      }
+
       try {
-        const email = document.getElementById('customerEmail').value.trim();
-        const logoUrl = document.getElementById('logoUrl').value.trim();
-        if (!logoUrl) { showMessage('Please enter a logo URL first.', 'error'); return; }
-        const resp = await fetch(`/api/products/${encodeURIComponent(productId)}/mockup`, {
+        const response = await fetch('/api/calculate-tax', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, logoUrl })
+          body: JSON.stringify({
+            zip: zip,
+            items: quote.map(item => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice
+            }))
+          })
         });
-        const data = await resp.json();
-        if (!resp.ok || !data.ok) {
-          console.error('mockup error:', data);
-          showMessage(`Mockup failed: ${data.error || 'unknown error'}`, 'error');
-          return;
+        
+        if (response.ok) {
+          const data = await response.json();
+          taxAmount = data.taxAmount || 0;
+        } else {
+          taxAmount = 0;
         }
-        showMessage(data.uploaded ? `Uploaded to S3: ${data.url}` : 'Mockup created (no S3 config).');
-        // reload products with same email to see preview
-        await loadProducts();
-      } catch (e) {
-        console.error(e);
-        showMessage('Mockup failed.', 'error');
+      } catch (error) {
+        console.error('Tax calculation failed:', error);
+        taxAmount = 0;
       }
+      
+      updateQuoteDisplay();
     }
 
-    // boot
-    loadProducts();
+    // Proceed to checkout
+    async function proceedToCheckout() {
+      if (quote.length === 0) {
+        showMessage('Please add items to your quote first', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('checkoutBtn');
+      btn.disabled = true;
+      btn.textContent = 'Creating checkout session...';
+
+      try {
+        const customerEmail = document.getElementById('customerEmail').value.trim();
+        
+        const payload = {
+          customerInfo: { 
+            name: '', 
+            email: customerEmail || '', 
+            company: '', 
+            phone: '' 
+          },
+          products: quote.map(item => ({ 
+            productId: item.productId, 
+            quantity: item.quantity 
+          })),
+          shippingAddress: { 
+            line1: 'TBD', city: 'TBD', state: 'TBD', 
+            postal_code: 'TBD', country: 'US' 
+          },
+          billingAddress: { 
+            line1: 'TBD', city: 'TBD', state: 'TBD', 
+            postal_code: 'TBD', country: 'US' 
+          }
+        };
+
+        const response = await fetch('/api/create-checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        
+        const data = await response.json();
+
+        if (data.url) {
+          showMessage('Redirecting to secure checkout...', 'success');
+          window.location = data.url;
+        } else {
+          showMessage(data.error || 'Failed to create checkout session', 'error');
+        }
+        
+      } catch (error) {
+        showMessage('Checkout failed: ' + error.message, 'error');
+        console.error('Checkout error:', error);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀 Get Final Quote & Checkout';
+      }
+    }
   </script>
 </body>
 </html>

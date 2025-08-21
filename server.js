@@ -1,47 +1,50 @@
 // server.js
 require('dotenv').config();
+console.log('STRIPE_SECRET_KEY:', process.env.STRIPE_SECRET_KEY);
 
 const express = require('express');
+const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
-const fetch = require('node-fetch'); // Node 18+ has global fetch; this keeps it explicit
-const sharp = require('sharp');
-const Airtable = require('airtable');
-
+const { spawn } = require('child_process');
+const { uploadFileToS3 } = require('./s3'); // Node S3 uploader (used for base placeholder upload)
 const app = express();
 
-// ---- Stripe (optional) ----
+// Initialize Stripe only if we have a valid API key
 let stripe = null;
 if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY.trim() !== '') {
-  console.log('STRIPE_SECRET_KEY:', process.env.STRIPE_SECRET_KEY);
   stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 } else {
   console.warn('⚠️  STRIPE_SECRET_KEY not found or empty. Stripe features will be disabled.');
 }
 
-// ---- Config ----
 const CONFIG = {
+  AWS_BUCKET_URL: process.env.AWS_BUCKET_URL || 'https://leadprocessor.s3.us-east-2.amazonaws.com',
+  AWS_REGION: process.env.AWS_REGION || 'us-east-2',
+  AWS_BUCKET_NAME: process.env.AWS_BUCKET_NAME || 'leadprocessor',
   PORT: process.env.PORT || 3000,
-  PUBLIC_BASE_URL: (process.env.PUBLIC_BASE_URL || 'http://localhost:3000').replace(/\/$/, ''),
-  AWS_BUCKET_URL: (process.env.AWS_BUCKET_URL || '').replace(/\/$/, ''),
+  PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || 'http://localhost:3000',
+  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || '',
   ALLOWED_SHIP_COUNTRIES: (process.env.ALLOWED_SHIP_COUNTRIES || 'US,CA')
     .split(',')
     .map(s => s.trim().toUpperCase())
 };
 
-// ---- S3 helper ----
-const { uploadBuffer, urlForKey, s3Ready } = require('./s3');
-
-// ---- Airtable ----
+// ---- Airtable loader with PAT (cached) ----
 const AIRTABLE = {
-  apiKey: process.env.AIRTABLE_API_KEY || '',
-  baseId: process.env.AIRTABLE_BASE_ID || '',
+  token: process.env.AIRTABLE_PAT,             // Personal Access Token (pat_…)
+  baseId: process.env.AIRTABLE_BASE_ID,        // e.g. appXXXXXXXXXXXXXX
   table: process.env.AIRTABLE_TABLE_NAME || 'Products',
 };
+
+// In-memory cache (5 minutes TTL)
+let _airtableCache = { products: null, expiresAt: 0 };
+
 function safeJsonParse(str, fallback) {
   if (!str || typeof str !== 'string') return fallback;
   try { return JSON.parse(str); } catch { return fallback; }
 }
+
 function mapAirtableRecordToProduct(rec) {
   const f = rec.fields || {};
   const pricing = safeJsonParse(f.pricing_json, []);
@@ -52,27 +55,42 @@ function mapAirtableRecordToProduct(rec) {
     sku: f.sku || '',
     description: f.description || '',
     imageFile: f.image_file || '',
-    pricing: pricing,
-    boxes: boxesObj.boxes || [],
+    pricing: Array.isArray(pricing) ? pricing : [],
+    boxes: Array.isArray(boxesObj?.boxes) ? boxesObj.boxes : [],
   };
 }
-let _airtableCache = { products: null, expiresAt: 0 };
-async function fetchProductsFromAirtableRaw() {
-  if (!AIRTABLE.apiKey || !AIRTABLE.baseId) {
-    throw new Error('Missing Airtable credentials');
+
+async function fetchAirtablePage(offset) {
+  if (!AIRTABLE.token || !AIRTABLE.baseId) {
+    throw new Error('Missing AIRTABLE_PAT or AIRTABLE_BASE_ID');
   }
-  const base = new Airtable({ apiKey: AIRTABLE.apiKey }).base(AIRTABLE.baseId);
-
-  const rows = [];
-  await base(AIRTABLE.table).select({}).eachPage((records, next) => {
-    for (const r of records) rows.push(mapAirtableRecordToProduct(r));
-    next();
+  const url = `https://api.airtable.com/v0/${AIRTABLE.baseId}/${encodeURIComponent(AIRTABLE.table)}`;
+  const params = { pageSize: 100, ...(offset ? { offset } : {}) };
+  const { data } = await axios.get(url, {
+    params,
+    headers: { Authorization: `Bearer ${AIRTABLE.token}` },
+    timeout: 15000,
   });
-
-  const cleaned = rows.filter(r => r.id && r.imageFile && Array.isArray(r.pricing));
-  if (!cleaned.length) throw new Error('No valid products in Airtable');
-  return cleaned;
+  return data;
 }
+
+async function fetchProductsFromAirtableRaw() {
+  let records = [];
+  let offset;
+  do {
+    const page = await fetchAirtablePage(offset);
+    records = records.concat(page.records || []);
+    offset = page.offset;
+  } while (offset);
+
+  const rows = records
+    .map(mapAirtableRecordToProduct)
+    .filter(r => r.id && r.imageFile && Array.isArray(r.pricing));
+
+  if (!rows.length) throw new Error('No valid products from Airtable');
+  return rows;
+}
+
 async function fetchProductsFromAirtableCached() {
   const now = Date.now();
   if (_airtableCache.products && _airtableCache.expiresAt > now) {
@@ -82,110 +100,93 @@ async function fetchProductsFromAirtableCached() {
   _airtableCache = { products: fresh, expiresAt: now + 5 * 60 * 1000 };
   return fresh;
 }
-async function pushMockupUrlToAirtable(productId, mockupUrl) {
-  if (!AIRTABLE.apiKey || !AIRTABLE.baseId) return { ok: false, reason: 'airtable-disabled' };
 
-  const base = new Airtable({ apiKey: AIRTABLE.apiKey }).base(AIRTABLE.baseId);
-  const table = base(AIRTABLE.table);
-  const results = await table
-    .select({ filterByFormula: `{product_id}="${productId}"`, maxRecords: 1 })
-    .firstPage();
-
-  if (!results || !results.length) return { ok: false, reason: 'no-row' };
-
-  const recId = results[0].id;
-  await table.update(recId, { mockup_url: mockupUrl });
-  return { ok: true };
+async function airtableFindRecordIdByProductId(productId) {
+  const url = `https://api.airtable.com/v0/${AIRTABLE.baseId}/${encodeURIComponent(AIRTABLE.table)}`;
+  const params = { filterByFormula: `{product_id}="${productId}"`, maxRecords: 1 };
+  const { data } = await axios.get(url, {
+    params,
+    headers: { Authorization: `Bearer ${AIRTABLE.token}` },
+    timeout: 15000
+  });
+  const rec = (data.records || [])[0];
+  return rec?.id || null;
 }
 
-// ---- Local fallback catalog (kept from your earlier message) ----
+async function airtableUpdateFields(recordId, fields) {
+  const url = `https://api.airtable.com/v0/${AIRTABLE.baseId}/${encodeURIComponent(AIRTABLE.table)}/${recordId}`;
+  const payload = { fields };
+  const { data } = await axios.patch(url, payload, {
+    headers: {
+      Authorization: `Bearer ${AIRTABLE.token}`,
+      'Content-Type': 'application/json'
+    },
+    timeout: 15000
+  });
+  return data;
+}
+
+// Admin-only: force cache reload
+app.post('/api/admin/reload-products', async (req, res) => {
+  try {
+    const fresh = await fetchProductsFromAirtableRaw();
+    _airtableCache = { products: fresh, expiresAt: Date.now() + 5 * 60 * 1000 };
+    res.json({ ok: true, count: fresh.length });
+  } catch (e) {
+    const hint = /403/.test(String(e)) ? ' (check PAT scopes & base access)' : '';
+    res.status(500).json({ error: e.message + hint });
+  }
+});
+
+/* ---------------------------------
+   Product Catalog (local fallback)
+   --------------------------------- */
 const PRODUCTS = [
-  { id: 'PROD001', name: 'Premium T-Shirt - Black', sku: 'TSHIRT-18500-BLACK', category: 'apparel',
+  {
+    id: 'PROD001',
+    name: 'Premium T-Shirt - Black',
+    sku: 'TSHIRT-18500-BLACK',
+    category: 'apparel',
     description: 'Premium cotton t-shirt with custom logo',
     imageFile: '18500_Black_Flat_Front-01_big_back.png',
-    pricing: [{minQty:1,maxQty:9,price:29.99},{minQty:10,maxQty:49,price:26.99},{minQty:50,maxQty:99,price:23.99},{minQty:100,maxQty:null,price:19.99}] },
-  { id: 'PROD002', name: 'Premium T-Shirt - Dark Chocolate', sku: 'TSHIRT-18500-CHOC', category: 'apparel',
-    description: 'Premium cotton t-shirt in dark chocolate with custom logo',
-    imageFile: '18500_Dark Chocolate_Flat_Front-01_big_back.png',
-    pricing: [{minQty:1,maxQty:9,price:29.99},{minQty:10,maxQty:49,price:26.99},{minQty:50,maxQty:99,price:23.99},{minQty:100,maxQty:null,price:19.99}] },
-  { id: 'PROD003', name: 'Classic T-Shirt - Black', sku: 'TSHIRT-2000-BLACK', category: 'apparel',
-    description: 'Classic fit t-shirt with custom logo',
-    imageFile: '2000_black_flat_front-01_right_chest.png',
-    pricing: [{minQty:1,maxQty:19,price:24.99},{minQty:20,maxQty:99,price:21.99},{minQty:100,maxQty:499,price:18.99},{minQty:500,maxQty:null,price:15.99}] },
-  { id: 'PROD004', name: 'Classic T-Shirt - Charcoal', sku: 'TSHIRT-2000-CHARCOAL', category: 'apparel',
-    description: 'Classic fit charcoal t-shirt with custom logo',
-    imageFile: '2000_charcoal_flat_front-01_right_chest.png',
-    pricing: [{minQty:1,maxQty:19,price:24.99},{minQty:20,maxQty:99,price:21.99},{minQty:100,maxQty:499,price:18.99},{minQty:500,maxQty:null,price:15.99}] },
-  { id: 'PROD005', name: 'Heavy Cotton T-Shirt - Black', sku: 'TSHIRT-5400-BLACK', category: 'apparel',
-    description: 'Heavy cotton t-shirt with custom logo',
-    imageFile: '5400_black_flat_front-01_right_chest.png',
-    pricing: [{minQty:1,maxQty:24,price:19.99},{minQty:25,maxQty:99,price:17.99},{minQty:100,maxQty:999,price:14.99},{minQty:1000,maxQty:null,price:12.99}] },
-  { id: 'PROD006', name: 'Canvas T-Shirt - Duck Brown', sku: 'CSV40-DUCKBROWN', category: 'apparel',
-    description: 'Canvas v-neck t-shirt in duck brown with custom logo',
-    imageFile: 'CSV40_duckbrown_flat_front-01_right_chest.png',
-    pricing: [{minQty:1,maxQty:49,price:22.99},{minQty:50,maxQty:249,price:19.99},{minQty:250,maxQty:999,price:16.99},{minQty:1000,maxQty:null,price:14.99}] },
-  { id: 'PROD007', name: 'Safety T-Shirt - Yellow', sku: 'CSV106-SAFETY', category: 'apparel',
-    description: 'High visibility safety yellow t-shirt with custom logo',
-    imageFile: 'CSV106_safetyyellow_flat_front_right_chest.png',
-    pricing: [{minQty:1,maxQty:49,price:18.99},{minQty:50,maxQty:249,price:16.99},{minQty:250,maxQty:999,price:14.99},{minQty:1000,maxQty:null,price:12.99}] },
-  { id: 'PROD008', name: 'Casual T-Shirt - Black', sku: 'CT104050-BLACK', category: 'apparel',
-    description: 'Casual black t-shirt with custom logo',
-    imageFile: 'CT104050_black_flat_front-01_right_chest.png',
-    pricing: [{minQty:1,maxQty:49,price:26.99},{minQty:50,maxQty:249,price:23.99},{minQty:250,maxQty:999,price:20.99},{minQty:1000,maxQty:null,price:17.99}] },
-  { id: 'PROD009', name: 'Casual T-Shirt - Carhartt Brown', sku: 'CT104050-BROWN', category: 'apparel',
-    description: 'Casual Carhartt brown t-shirt with custom logo',
-    imageFile: 'CT104050_carharttbrown_flat_front-01_right_chest.png',
-    pricing: [{minQty:1,maxQty:49,price:26.99},{minQty:50,maxQty:249,price:23.99},{minQty:250,maxQty:999,price:20.99},{minQty:1000,maxQty:null,price:17.99}] },
-  { id: 'PROD010', name: 'Fashion T-Shirt - Black', sku: 'F170-BLACK', category: 'apparel',
-    description: 'Fashion fit black t-shirt with custom logo',
-    imageFile: 'F170_Black_flat_front-01_big_back.png',
-    pricing: [{minQty:1,maxQty:49,price:21.99},{minQty:50,maxQty:249,price:19.99},{minQty:250,maxQty:999,price:16.99},{minQty:1000,maxQty:null,price:14.99}] },
-  { id: 'PROD011', name: 'Heavy Blend T-Shirt - Black', sku: 'G2400-BLACK', category: 'apparel',
-    description: 'Heavy blend black t-shirt with custom logo',
-    imageFile: 'G2400_black_flat_front-01_big_back.png',
-    pricing: [{minQty:1,maxQty:49,price:23.99},{minQty:50,maxQty:249,price:20.99},{minQty:250,maxQty:999,price:17.99},{minQty:1000,maxQty:null,price:15.99}] },
-  { id: 'PROD012', name: 'Heavy Blend T-Shirt - Charcoal', sku: 'G2400-CHARCOAL', category: 'apparel',
-    description: 'Heavy blend charcoal t-shirt with custom logo',
-    imageFile: 'G2400_charcoal_flat_front-01_big_back.png',
-    pricing: [{minQty:1,maxQty:49,price:23.99},{minQty:50,maxQty:249,price:20.99},{minQty:250,maxQty:999,price:17.99},{minQty:1000,maxQty:null,price:15.99}] },
-  { id: 'PROD013', name: 'Heavy Blend T-Shirt - Dark Chocolate', sku: 'G2400-DARKCHOC', category: 'apparel',
-    description: 'Heavy blend dark chocolate t-shirt with custom logo',
-    imageFile: 'G2400_darkchocolate_flat_front-01_big_back.png',
-    pricing: [{minQty:1,maxQty:49,price:23.99},{minQty:50,maxQty:249,price:20.99},{minQty:250,maxQty:999,price:17.99},{minQty:1000,maxQty:null,price:15.99}] },
-  { id: 'PROD014', name: 'Lightweight T-Shirt - Black', sku: 'K540-BLACK', category: 'apparel',
-    description: 'Lightweight black t-shirt with custom logo',
-    imageFile: 'K540_Black_Flat_Front-01_right_chest.png',
-    pricing: [{minQty:1,maxQty:49,price:27.99},{minQty:50,maxQty:249,price:24.99},{minQty:250,maxQty:999,price:21.99},{minQty:1000,maxQty:null,price:18.99}] },
-  { id: 'PROD015', name: 'Nike Dri-FIT T-Shirt - Black', sku: 'NKCY9963-BLACK', category: 'apparel',
-    description: 'Nike Dri-FIT performance t-shirt with custom logo',
-    imageFile: 'NKDC1963_Black_Flat_Front-01_right_chest.png',
-    pricing: [{minQty:1,maxQty:24,price:44.99},{minQty:25,maxQty:99,price:40.99},{minQty:100,maxQty:499,price:36.99},{minQty:500,maxQty:null,price:32.99}] },
-  { id: 'PROD016', name: 'Performance T-Shirt - Black', sku: 'PC78SP-BLACK', category: 'apparel',
-    description: 'Performance jet black t-shirt with custom logo',
-    imageFile: 'PC78SP_JET BLACK_Flat_Front-01_right_chest.png',
-    pricing: [{minQty:1,maxQty:49,price:31.99},{minQty:50,maxQty:249,price:28.99},{minQty:250,maxQty:999,price:25.99},{minQty:1000,maxQty:null,price:22.99}] },
-  { id: 'PROD017', name: 'Tri-Blend T-Shirt - Black', sku: 'TL1763H-BLACK', category: 'apparel',
-    description: 'Tri-blend black t-shirt with custom logo',
-    imageFile: 'TLJ763H_Black_Flat_Front-01_right_chest.png',
-    pricing: [{minQty:1,maxQty:49,price:34.99},{minQty:50,maxQty:249,price:31.99},{minQty:250,maxQty:999,price:27.99},{minQty:1000,maxQty:null,price:24.99}] },
-  { id: 'PROD018', name: 'Tri-Blend T-Shirt - Duck Brown', sku: 'TL1763H-DUCKBROWN', category: 'apparel',
-    description: 'Tri-blend duck brown t-shirt with custom logo',
-    imageFile: 'TLJ763H_Duck Brown_Flat_Front-01_right_chest.png',
-    pricing: [{minQty:1,maxQty:49,price:34.99},{minQty:50,maxQty:249,price:31.99},{minQty:250,maxQty:999,price:27.99},{minQty:1000,maxQty:null,price:24.99}] },
-  { id: 'PROD019', name: 'Grey Steel T-Shirt - Orange Logo', sku: 'C112-GREYSTEEL', category: 'apparel',
-    description: 'Grey steel t-shirt with neon orange custom logo',
-    imageFile: 'C112_greysteelneonorange_full_front-01_right_chest.png',
-    pricing: [{minQty:1,maxQty:49,price:28.99},{minQty:50,maxQty:249,price:25.99},{minQty:250,maxQty:999,price:22.99},{minQty:1000,maxQty:null,price:19.99}] },
-  { id: 'PROD020', name: 'Classic Polo - Black', sku: 'C932-BLACK', category: 'apparel',
+    pricing: [
+      { minQty: 1, maxQty: 9, price: 29.99 },
+      { minQty: 10, maxQty: 49, price: 26.99 },
+      { minQty: 50, maxQty: 99, price: 23.99 },
+      { minQty: 100, maxQty: null, price: 19.99 }
+    ]
+  },
+  // ... keep all your existing products through PROD020 ...
+  {
+    id: 'PROD020',
+    name: 'Classic Polo - Black',
+    sku: 'C932-BLACK',
+    category: 'apparel',
     description: 'Classic black polo shirt with embroidered logo',
     imageFile: 'C932_Black_Flat_Front-01_right_chest.png',
-    pricing: [{minQty:1,maxQty:19,price:39.99},{minQty:20,maxQty:99,price:35.99},{minQty:100,maxQty:499,price:31.99},{minQty:500,maxQty:null,price:27.99}] },
+    pricing: [
+      { minQty: 1, maxQty: 19, price: 39.99 },
+      { minQty: 20, maxQty: 99, price: 35.99 },
+      { minQty: 100, maxQty: 499, price: 31.99 },
+      { minQty: 500, maxQty: null, price: 27.99 }
+    ]
+  }
 ];
 
-// ---- Helpers ----
+/* ---------------------------------
+   Helpers
+   --------------------------------- */
 function emailToS3Folder(email) {
   return (email || '').toLowerCase().replace(/@/g, '_at_').replace(/\./g, '_dot_');
 }
+
+function getProductImageUrl(product, customerEmail) {
+  const emailFolder = emailToS3Folder(customerEmail || 'default@example.com');
+  const encodedFile = encodeURIComponent(product.imageFile);
+  const baseUrl = CONFIG.AWS_BUCKET_URL.replace(/\/$/, '');
+  return `${baseUrl}/${emailFolder}/mockups/${encodedFile}`;
+}
+
 function calculatePrice(product, quantity) {
   const q = Math.max(1, parseInt(quantity, 10) || 1);
   const tier = product.pricing.find(
@@ -194,153 +195,326 @@ function calculatePrice(product, quantity) {
   return tier ? tier.price : product.pricing[0].price;
 }
 
-// ---- Express ----
-app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+async function getActiveProducts() {
+  try { return await fetchProductsFromAirtableCached(); }
+  catch (err) { console.warn('⚠️ Airtable fetch failed, using local PRODUCTS:', err.message); return PRODUCTS; }
+}
 
-// Admin: force Airtable reload
-app.post('/api/admin/reload-products', async (_req, res) => {
-  try {
-    const fresh = await fetchProductsFromAirtableRaw();
-    _airtableCache = { products: fresh, expiresAt: Date.now() + 5 * 60 * 1000 };
-    res.json({ ok: true, count: fresh.length });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
+function shippingOptionsFor(subtotalCents, shippingAddress) {
+  const isUS = (shippingAddress?.country || 'US').toUpperCase() === 'US';
+  const options = [];
+  if (isUS) {
+    const standardAmount = subtotalCents < 10000 ? 1000 : 0; // <$100 => $10, else free
+    options.push({
+      shipping_rate_data: {
+        display_name: standardAmount === 0 ? 'Standard (Free over $100)' : 'Standard',
+        type: 'fixed_amount',
+        fixed_amount: { amount: standardAmount, currency: 'usd' },
+        tax_behavior: 'exclusive',
+        delivery_estimate: { minimum: { unit: 'business_day', value: 5 }, maximum: { unit: 'business_day', value: 8 } }
+      }
+    });
+    options.push({
+      shipping_rate_data: {
+        display_name: 'Express',
+        type: 'fixed_amount',
+        fixed_amount: { amount: 2500, currency: 'usd' },
+        tax_behavior: 'exclusive',
+        delivery_estimate: { minimum: { unit: 'business_day', value: 2 }, maximum: { unit: 'business_day', value: 3 } }
+      }
+    });
+  } else {
+    options.push({
+      shipping_rate_data: {
+        display_name: 'Standard (Intl.)',
+        type: 'fixed_amount',
+        fixed_amount: { amount: 2500, currency: 'usd' },
+        tax_behavior: 'exclusive'
+      }
+    });
+    options.push({
+      shipping_rate_data: {
+        display_name: 'Express (Intl.)',
+        type: 'fixed_amount',
+        fixed_amount: { amount: 5000, currency: 'usd' },
+        tax_behavior: 'exclusive'
+      }
+    });
   }
-});
+  return options;
+}
 
-// Products API (Airtable → fallback) with mockup/base URLs
+/* ---------------------------------
+   Express
+   --------------------------------- */
+app.use(express.json());
+app.use(express.static('public'));
+
+/* Products (Airtable preferred; returns array for your UI) */
 app.get('/api/products', async (req, res) => {
   const { customerEmail } = req.query || {};
-  let source = 'airtable';
   let products;
-  try {
-    products = await fetchProductsFromAirtableCached();
-  } catch (err) {
-    console.warn('⚠️ Airtable fetch failed, falling back to local PRODUCTS:', err.message);
-    source = 'local';
-    products = (PRODUCTS || []).map(p => ({ ...p, boxes: p.boxes || [] }));
-  }
+  try { products = await fetchProductsFromAirtableCached(); }
+  catch { products = PRODUCTS; }
 
   const enriched = products.map(p => {
     const baseImageUrl = `${CONFIG.PUBLIC_BASE_URL}/images/products/${encodeURIComponent(p.imageFile)}`;
     const previewImageUrl = customerEmail
       ? `${CONFIG.AWS_BUCKET_URL}/${emailToS3Folder(customerEmail)}/mockups/${encodeURIComponent(p.imageFile)}`
       : null;
-    const pricingTable = (p.pricing || []).map(t => ({
+
+    const pricing = p.pricing || [];
+    const pricingTable = pricing.map(t => ({
       quantity_range: t.maxQty ? `${t.minQty}-${t.maxQty}` : `${t.minQty}+`,
       price_per_unit: `$${Number(t.price || 0).toFixed(2)}`
     }));
-    return { ...p, baseImageUrl, previewImageUrl, pricingTable, currentPrice: Number(p.pricing?.[0]?.price || 0) };
+
+    return { ...p, baseImageUrl, previewImageUrl, pricingTable, currentPrice: Number(pricing?.[0]?.price || 0) };
   });
 
-  res.json({ source, products: enriched });
+  res.json(enriched); // plain array for your existing front-end
 });
 
-// ---- Mockup generation + S3 upload + Airtable push ----
-async function downloadToBuffer(url) {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`download failed: ${r.status} ${url}`);
-  return Buffer.from(await r.arrayBuffer());
-}
-function resolveBaseImageOnDisk(imageFile) {
-  const p = path.join(__dirname, 'public', 'images', 'products', imageFile);
-  if (!fs.existsSync(p)) return null;
-  return p;
-}
-/**
- * Simple compositor: puts logo on the first box in product.boxes,
- * or centers it at 30% width if no boxes provided.
- */
-async function composeMockup(basePath, logoBuf, product) {
-  const base = sharp(basePath);
-  const meta = await base.metadata();
+/* Price calculation per quantity (uses Airtable data first) */
+app.post('/api/calculate-price', async (req, res) => {
+  const { productId, quantity } = req.body || {};
+  if (!productId) return res.status(400).json({ error: 'productId required' });
 
-  let x, y, w, h;
-  if (Array.isArray(product.boxes) && product.boxes.length) {
-    const b = product.boxes[0];
-    // boxes are normalized 0..1? If your boxes are in px, adjust here:
-    const nx1 = (b.x1 ?? b.left ?? 0.35), ny1 = (b.y1 ?? b.top ?? 0.25);
-    const nx2 = (b.x2 ?? b.right ?? 0.65), ny2 = (b.y2 ?? b.bottom ?? 0.45);
-    w = Math.round((nx2 - nx1) * meta.width);
-    h = Math.round((ny2 - ny1) * meta.height);
-    x = Math.round(nx1 * meta.width);
-    y = Math.round(ny1 * meta.height);
-  } else {
-    // default: center block
-    w = Math.round(meta.width * 0.30);
-    h = Math.round(w * 0.6);
-    x = Math.round((meta.width - w) / 2);
-    y = Math.round(meta.height * 0.30);
-  }
+  const list = await getActiveProducts();
+  const product = list.find(p => p.id === productId);
+  if (!product) return res.status(404).json({ error: 'Product not found' });
 
-  const logoResized = await sharp(logoBuf).resize({ width: w, height: h, fit: 'inside' }).png().toBuffer();
+  const qty = Math.max(1, parseInt(quantity, 10) || 1);
+  const unitPrice = calculatePrice(product, qty);
+  const totalPrice = unitPrice * qty;
+  const basePrice = product.pricing?.[0]?.price || unitPrice;
+  const savings = qty > 1 ? (basePrice - unitPrice) * qty : 0;
 
-  const out = await base
-    .composite([{ input: logoResized, left: x, top: y }])
-    .png()
-    .toBuffer();
+  res.json({
+    productId,
+    quantity: qty,
+    unitPrice,
+    totalPrice,
+    savings: Number(savings.toFixed(2)),
+    pricingTier: product.pricing.find((p) => qty >= p.minQty && (p.maxQty === null || qty <= p.maxQty))
+  });
+});
 
-  return out;
-}
-
-/**
- * POST /api/products/:productId/mockup
- * body: { email, logoUrl }
- * Generates mockup, uploads to S3 (if configured), pushes URL to Airtable.
- */
-app.post('/api/products/:productId/mockup', async (req, res) => {
+/* Tax calculation endpoint */
+app.post('/api/calculate-tax', async (req, res) => {
   try {
-    const { productId } = req.params;
-    const { email, logoUrl } = req.body || {};
-    if (!productId || !logoUrl) return res.status(400).json({ error: 'Missing productId or logoUrl' });
+    if (!stripe) return res.status(500).json({ error: 'Missing STRIPE_SECRET_KEY' });
 
-    // Get product (Airtable first)
-    let prods;
-    try { prods = await fetchProductsFromAirtableCached(); }
-    catch { prods = PRODUCTS; }
+    const { zip, items } = req.body || {};
+    if (!zip || !Array.isArray(items) || !items.length) return res.json({ taxAmount: 0 });
 
-    const product = (prods || []).find(p => p.id === productId);
-    if (!product) return res.status(404).json({ error: 'Product not found' });
+    const line_items = items.map((item) => ({
+      amount: Math.round(Number(item.unitPrice || 0) * 100),
+      quantity: item.quantity,
+      reference: item.productId
+    }));
 
-    const basePath = resolveBaseImageOnDisk(product.imageFile);
-    if (!basePath) {
-      return res.status(404).json({ error: `Base image not found on server: ${product.imageFile}` });
-    }
-
-    const logoBuf = await downloadToBuffer(logoUrl);
-    const mockupBuf = await composeMockup(basePath, logoBuf, product);
-
-    const fileName = product.imageFile; // save with same name for easy preview fallback
-    const key = `${emailToS3Folder(email || 'default@example.com')}/mockups/${fileName}`;
-
-    let publicUrl = null;
-    if (s3Ready()) {
-      await uploadBuffer(key, mockupBuf, 'image/png');
-      publicUrl = urlForKey(key);
-    }
-
-    if (publicUrl) {
-      // best-effort: write back to Airtable
-      try { await pushMockupUrlToAirtable(productId, publicUrl); } catch (_) {}
-    }
-
-    res.json({
-      ok: true,
-      uploaded: !!publicUrl,
-      url: publicUrl || null,
-      key
+    const calculation = await stripe.tax.calculations.create({
+      currency: 'usd',
+      line_items,
+      customer_details: { address: { postal_code: zip, country: 'US' }, address_source: 'shipping' }
     });
+
+    const taxAmount = calculation.tax_amount_exclusive / 100;
+    res.json({ taxAmount: Number(taxAmount.toFixed(2)), taxBreakdown: calculation.tax_breakdown });
   } catch (err) {
-    console.error('mockup error:', err);
-    res.status(500).json({ error: 'mockup-failed', detail: err.message });
+    console.error('Tax calculation error:', err);
+    res.status(500).json({ error: 'Failed to calculate tax', taxAmount: 0 });
   }
 });
 
-// Health
+/* Stripe Checkout with Stripe Tax + shipping */
+app.post('/api/create-checkout', async (req, res) => {
+  try {
+    if (!stripe) return res.status(500).json({ error: 'Missing STRIPE_SECRET_KEY in .env' });
+
+    const { customerInfo, products: cart } = req.body || {};
+    if (!Array.isArray(cart) || !cart.length) return res.status(400).json({ error: 'Cart is empty' });
+
+    const safeCustomerInfo = customerInfo || { name: '', email: '', company: '', phone: '' };
+    const activeProducts = await getActiveProducts();
+
+    const line_items = cart.map((item) => {
+      const p = activeProducts.find((x) => x.id === item.productId);
+      if (!p) throw new Error(`Unknown product ${item.productId}`);
+      const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
+      const unit = calculatePrice(p, qty);
+      const img = getProductImageUrl(p, safeCustomerInfo.email || 'default@example.com');
+
+      return {
+        price_data: {
+          currency: 'usd',
+          unit_amount: Math.round(unit * 100),
+          tax_behavior: 'exclusive',
+          product_data: { name: p.name, description: p.description, images: [img] }
+        },
+        quantity: qty
+      };
+    });
+
+    const subtotalCents = cart.reduce((sum, item) => {
+      const p = activeProducts.find(ap => ap.id === item.productId);
+      if (!p) return sum;
+      const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
+      const unit = calculatePrice(p, qty);
+      return sum + Math.round(unit * 100) * qty;
+    }, 0);
+
+    const shipping_options = shippingOptionsFor(subtotalCents, { country: 'US' });
+
+    const sessionConfig = {
+      mode: 'payment',
+      billing_address_collection: 'required',
+      shipping_address_collection: { allowed_countries: CONFIG.ALLOWED_SHIP_COUNTRIES },
+      phone_number_collection: { enabled: true },
+      customer_email: safeCustomerInfo.email || undefined,
+      shipping_options,
+      automatic_tax: { enabled: true },
+      line_items,
+      allow_promotion_codes: true,
+      success_url: `${CONFIG.PUBLIC_BASE_URL}/?success=1&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${CONFIG.PUBLIC_BASE_URL}/?canceled=1`
+    };
+
+    const session = await stripe.checkout.sessions.create(sessionConfig);
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error('Stripe create-checkout error:', err);
+    res.status(500).json({ error: 'Failed to create payment link', details: err.message });
+  }
+});
+
+/* ====== Per-product endpoints: boxes, mockup+upload (combined), upload base ====== */
+
+// Save boxes JSON to Airtable "boxes" field for a product_id
+app.post('/api/products/:id/boxes', async (req, res) => {
+  try {
+    if (!AIRTABLE.token) return res.status(500).json({ error: 'Airtable not configured' });
+    const productId = req.params.id;
+    const boxes = req.body?.boxes;
+    if (!Array.isArray(boxes) || boxes.length === 0) {
+      return res.status(400).json({ error: 'boxes array required' });
+    }
+    const recordId = await airtableFindRecordIdByProductId(productId);
+    if (!recordId) return res.status(404).json({ error: 'Airtable record not found for product_id' });
+
+    await airtableUpdateFields(recordId, { boxes: JSON.stringify({ boxes }) });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('boxes save error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/**
+ * Generate mockup for a single product:
+ * - Upload base image to S3 as placeholder
+ * - Run Python generator (which uploads mockups to S3)
+ * - Parse JSON manifest from Python stdout
+ * - Update Airtable with mockup URLs + metadata
+ */
+// server.js  — REPLACE the existing /api/products/:id/mockup handler with this one
+app.post('/api/products/:id/mockup', async (req, res) => {
+  try {
+    const productId = req.params.id;
+    const { email, logoUrl } = req.body || {};
+    if (!email || !logoUrl) return res.status(400).json({ error: 'email and logoUrl required' });
+
+    // Find product (Airtable preferred, else local)
+    const list = await getActiveProducts();
+    const p = list.find(x => x.id === productId);
+    if (!p) return res.status(404).json({ error: 'Product not found' });
+
+    // 1) Try to upload base image as placeholder if it exists locally; otherwise fallback to public URL
+    const localPath = path.join(__dirname, 'public', 'images', 'products', p.imageFile);
+    const folder = emailToS3Folder(email);
+    const baseKey = `${folder}/mockups/${p.imageFile}`;
+    const ext = (p.imageFile.split('.').pop() || '').toLowerCase();
+    const type = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'application/octet-stream');
+
+    let placeholderBaseUrl = `${CONFIG.PUBLIC_BASE_URL}/images/products/${encodeURIComponent(p.imageFile)}`;
+    if (fs.existsSync(localPath) && typeof uploadFileToS3 === 'function') {
+      try {
+        placeholderBaseUrl = await uploadFileToS3(localPath, baseKey, type, true);
+      } catch (e) {
+        console.warn('Placeholder upload failed, continuing with public URL fallback:', e.message);
+      }
+    } else {
+      console.warn(`Base image not on disk (${p.imageFile}); using public URL fallback.`);
+    }
+
+    // 2) Run Python generator (it will also upload mockups and can fetch the base image if missing)
+    const scriptPath = path.join(__dirname, 'python', 'build_mockups_from_airtable.py');
+    const args = [
+      scriptPath,
+      '--email', email,
+      '--logo_url', logoUrl,
+      '--products_dir', path.join(__dirname, 'public', 'images', 'products'),
+      '--product_id', productId
+    ];
+    let pyStdout = '';
+    let pyStderr = '';
+    const py = spawn('python', args);
+    py.stdout.on('data', (d) => { pyStdout += d.toString(); });
+    py.stderr.on('data', (d) => { pyStderr += d.toString(); });
+    py.on('close', async (code) => {
+      if (code !== 0) {
+        console.error('mockup stderr:', pyStderr);
+        return res.status(500).json({ error: `mockup generation failed (${code})` });
+      }
+
+      let manifest = null;
+      try { manifest = JSON.parse(pyStdout.trim()); }
+      catch (e) {
+        console.error('Manifest parse error:', e.message, '\nSTDOUT:', pyStdout);
+        return res.status(500).json({ error: 'Invalid manifest from generator' });
+      }
+
+      // Update Airtable with URLs + metadata for this product
+      const recId = await airtableFindRecordIdByProductId(productId);
+      const nowIso = new Date().toISOString();
+      const imageFile = p.imageFile;
+      const pm = (manifest.product_map && manifest.product_map[imageFile]) || {};
+      const pngUrl = (pm.png_urls && pm.png_urls[0]) || placeholderBaseUrl;
+      const pdfUrl = (pm.pdf_urls && pm.pdf_urls[0]) || null;
+      const previewUrl = (pm.preview_urls && pm.preview_urls[0]) || null;
+
+      if (recId) {
+        const fields = {
+          last_mockup_url: pngUrl,
+          last_mockup_pdf_url: pdfUrl,
+          last_mockup_preview_url: previewUrl,
+          last_mockup_email: email,
+          last_mockup_at: nowIso,
+          last_mockup_s3_key: `${folder}/mockups/${p.imageFile}`,
+          last_mockup_status: 'uploaded'
+        };
+        try { await airtableUpdateFields(recId, fields); }
+        catch (e) { console.warn('Airtable update (mockup) warning:', e.message); }
+      }
+
+      res.json({
+        ok: true,
+        placeholder_base_url: placeholderBaseUrl,
+        mockup: { pngUrl, pdfUrl, previewUrl },
+        manifest
+      });
+    });
+  } catch (e) {
+    console.error('mockup error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* Health */
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
-// Start
+/* Start */
 app.listen(CONFIG.PORT, () => {
   console.log(`Server running on port ${CONFIG.PORT}`);
   console.log(`Open ${CONFIG.PUBLIC_BASE_URL}`);
