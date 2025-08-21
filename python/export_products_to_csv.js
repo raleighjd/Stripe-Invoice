@@ -1,4 +1,8 @@
-﻿const fs = require('fs');
+﻿// scripts/export_products_to_csv.js
+// Usage: node scripts/export_products_to_csv.js [outputPath]
+// Default output: ./products_full.csv
+
+const fs = require('fs');
 const path = require('path');
 
 function escCSV(s) {
@@ -49,9 +53,7 @@ try {
 }
 
 // 4) Build CSV rows (Airtable schema)
-const header = [
-  'product_id','name','sku','description','image_file','pricing_json','boxes'
-];
+const header = [ 'product_id','name','sku','description','image_file','pricing_json','boxes' ];
 const rows = [header.join(',')];
 
 for (const p of PRODUCTS) {

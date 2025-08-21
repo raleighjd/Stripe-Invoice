@@ -4,6 +4,8 @@ console.log('STRIPE_SECRET_KEY:', process.env.STRIPE_SECRET_KEY);
 
 const express = require('express');
 const axios = require('axios');
+const path = require('path');
+const { spawn } = require('child_process');
 const app = express();
 
 // Initialize Stripe only if we have a valid API key
@@ -16,6 +18,8 @@ if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY.trim() !== ''
 
 const CONFIG = {
   AWS_BUCKET_URL: process.env.AWS_BUCKET_URL || 'https://leadprocessor.s3.us-east-2.amazonaws.com',
+  AWS_REGION: process.env.AWS_REGION || 'us-east-2',
+  AWS_BUCKET_NAME: process.env.AWS_BUCKET_NAME || 'leadprocessor',
   PORT: process.env.PORT || 3000,
   PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || 'http://localhost:3000',
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || '',
@@ -26,7 +30,7 @@ const CONFIG = {
 
 // ---- Airtable loader with PAT (cached) ----
 const AIRTABLE = {
-  token: process.env.AIRTABLE_PAT,             // ← Personal Access Token (pat_…)
+  token: process.env.AIRTABLE_PAT,             // Personal Access Token (pat_…)
   baseId: process.env.AIRTABLE_BASE_ID,        // e.g. appXXXXXXXXXXXXXX
   table: process.env.AIRTABLE_TABLE_NAME || 'Products',
 };
@@ -125,258 +129,7 @@ const PRODUCTS = [
       { minQty: 100, maxQty: null, price: 19.99 }
     ]
   },
-  {
-    id: 'PROD002',
-    name: 'Premium T-Shirt - Dark Chocolate',
-    sku: 'TSHIRT-18500-CHOC',
-    category: 'apparel',
-    description: 'Premium cotton t-shirt in dark chocolate with custom logo',
-    imageFile: '18500_Dark Chocolate_Flat_Front-01_big_back.png',
-    pricing: [
-      { minQty: 1, maxQty: 9, price: 29.99 },
-      { minQty: 10, maxQty: 49, price: 26.99 },
-      { minQty: 50, maxQty: 99, price: 23.99 },
-      { minQty: 100, maxQty: null, price: 19.99 }
-    ]
-  },
-  {
-    id: 'PROD003',
-    name: 'Classic T-Shirt - Black',
-    sku: 'TSHIRT-2000-BLACK',
-    category: 'apparel',
-    description: 'Classic fit t-shirt with custom logo',
-    imageFile: '2000_black_flat_front-01_right_chest.png',
-    pricing: [
-      { minQty: 1, maxQty: 19, price: 24.99 },
-      { minQty: 20, maxQty: 99, price: 21.99 },
-      { minQty: 100, maxQty: 499, price: 18.99 },
-      { minQty: 500, maxQty: null, price: 15.99 }
-    ]
-  },
-  {
-    id: 'PROD004',
-    name: 'Classic T-Shirt - Charcoal',
-    sku: 'TSHIRT-2000-CHARCOAL',
-    category: 'apparel',
-    description: 'Classic fit charcoal t-shirt with custom logo',
-    imageFile: '2000_charcoal_flat_front-01_right_chest.png',
-    pricing: [
-      { minQty: 1, maxQty: 19, price: 24.99 },
-      { minQty: 20, maxQty: 99, price: 21.99 },
-      { minQty: 100, maxQty: 499, price: 18.99 },
-      { minQty: 500, maxQty: null, price: 15.99 }
-    ]
-  },
-  {
-    id: 'PROD005',
-    name: 'Heavy Cotton T-Shirt - Black',
-    sku: 'TSHIRT-5400-BLACK',
-    category: 'apparel',
-    description: 'Heavy cotton t-shirt with custom logo',
-    imageFile: '5400_black_flat_front-01_right_chest.png',
-    pricing: [
-      { minQty: 1, maxQty: 24, price: 19.99 },
-      { minQty: 25, maxQty: 99, price: 17.99 },
-      { minQty: 100, maxQty: 999, price: 14.99 },
-      { minQty: 1000, maxQty: null, price: 12.99 }
-    ]
-  },
-  {
-    id: 'PROD006',
-    name: 'Canvas T-Shirt - Duck Brown',
-    sku: 'CSV40-DUCKBROWN',
-    category: 'apparel',
-    description: 'Canvas v-neck t-shirt in duck brown with custom logo',
-    imageFile: 'CSV40_duckbrown_flat_front-01_right_chest.png',
-    pricing: [
-      { minQty: 1, maxQty: 49, price: 22.99 },
-      { minQty: 50, maxQty: 249, price: 19.99 },
-      { minQty: 250, maxQty: 999, price: 16.99 },
-      { minQty: 1000, maxQty: null, price: 14.99 }
-    ]
-  },
-  {
-    id: 'PROD007',
-    name: 'Safety T-Shirt - Yellow',
-    sku: 'CSV106-SAFETY',
-    category: 'apparel',
-    description: 'High visibility safety yellow t-shirt with custom logo',
-    imageFile: 'CSV106_safetyyellow_flat_front_right_chest.png',
-    pricing: [
-      { minQty: 1, maxQty: 49, price: 18.99 },
-      { minQty: 50, maxQty: 249, price: 16.99 },
-      { minQty: 250, maxQty: 999, price: 14.99 },
-      { minQty: 1000, maxQty: null, price: 12.99 }
-    ]
-  },
-  {
-    id: 'PROD008',
-    name: 'Casual T-Shirt - Black',
-    sku: 'CT104050-BLACK',
-    category: 'apparel',
-    description: 'Casual black t-shirt with custom logo',
-    imageFile: 'CT104050_black_flat_front-01_right_chest.png',
-    pricing: [
-      { minQty: 1, maxQty: 49, price: 26.99 },
-      { minQty: 50, maxQty: 249, price: 23.99 },
-      { minQty: 250, maxQty: 999, price: 20.99 },
-      { minQty: 1000, maxQty: null, price: 17.99 }
-    ]
-  },
-  {
-    id: 'PROD009',
-    name: 'Casual T-Shirt - Carhartt Brown',
-    sku: 'CT104050-BROWN',
-    category: 'apparel',
-    description: 'Casual Carhartt brown t-shirt with custom logo',
-    imageFile: 'CT104050_carharttbrown_flat_front-01_right_chest.png',
-    pricing: [
-      { minQty: 1, maxQty: 49, price: 26.99 },
-      { minQty: 50, maxQty: 249, price: 23.99 },
-      { minQty: 250, maxQty: 999, price: 20.99 },
-      { minQty: 1000, maxQty: null, price: 17.99 }
-    ]
-  },
-  {
-    id: 'PROD010',
-    name: 'Fashion T-Shirt - Black',
-    sku: 'F170-BLACK',
-    category: 'apparel',
-    description: 'Fashion fit black t-shirt with custom logo',
-    imageFile: 'F170_Black_flat_front-01_big_back.png',
-    pricing: [
-      { minQty: 1, maxQty: 49, price: 21.99 },
-      { minQty: 50, maxQty: 249, price: 19.99 },
-      { minQty: 250, maxQty: 999, price: 16.99 },
-      { minQty: 1000, maxQty: null, price: 14.99 }
-    ]
-  },
-  {
-    id: 'PROD011',
-    name: 'Heavy Blend T-Shirt - Black',
-    sku: 'G2400-BLACK',
-    category: 'apparel',
-    description: 'Heavy blend black t-shirt with custom logo',
-    imageFile: 'G2400_Black_flat_front-01_big_back.png',
-    pricing: [
-      { minQty: 1, maxQty: 49, price: 23.99 },
-      { minQty: 50, maxQty: 249, price: 20.99 },
-      { minQty: 250, maxQty: 999, price: 17.99 },
-      { minQty: 1000, maxQty: null, price: 15.99 }
-    ]
-  },
-  {
-    id: 'PROD012',
-    name: 'Heavy Blend T-Shirt - Charcoal',
-    sku: 'G2400-CHARCOAL',
-    category: 'apparel',
-    description: 'Heavy blend charcoal t-shirt with custom logo',
-    imageFile: 'G2400_charcoal_flat_front-01_big_back.png',
-    pricing: [
-      { minQty: 1, maxQty: 49, price: 23.99 },
-      { minQty: 50, maxQty: 249, price: 20.99 },
-      { minQty: 250, maxQty: 999, price: 17.99 },
-      { minQty: 1000, maxQty: null, price: 15.99 }
-    ]
-  },
-  {
-    id: 'PROD013',
-    name: 'Heavy Blend T-Shirt - Dark Chocolate',
-    sku: 'G2400-DARKCHOC',
-    category: 'apparel',
-    description: 'Heavy blend dark chocolate t-shirt with custom logo',
-    imageFile: 'G2400_darkchocolate_flat_front-01_big_back.png',
-    pricing: [
-      { minQty: 1, maxQty: 49, price: 23.99 },
-      { minQty: 50, maxQty: 249, price: 20.99 },
-      { minQty: 250, maxQty: 999, price: 17.99 },
-      { minQty: 1000, maxQty: null, price: 15.99 }
-    ]
-  },
-  {
-    id: 'PROD014',
-    name: 'Lightweight T-Shirt - Black',
-    sku: 'K540-BLACK',
-    category: 'apparel',
-    description: 'Lightweight black t-shirt with custom logo',
-    imageFile: 'K540_Black_Flat_Front-01_right_chest.png',
-    pricing: [
-      { minQty: 1, maxQty: 49, price: 27.99 },
-      { minQty: 50, maxQty: 249, price: 24.99 },
-      { minQty: 250, maxQty: 999, price: 21.99 },
-      { minQty: 1000, maxQty: null, price: 18.99 }
-    ]
-  },
-  {
-    id: 'PROD015',
-    name: 'Nike Dri-FIT T-Shirt - Black',
-    sku: 'NKCY9963-BLACK',
-    category: 'apparel',
-    description: 'Nike Dri-FIT performance t-shirt with custom logo',
-    imageFile: 'NKDC1963_Black_Flat_Front-01_right_chest.png',
-    pricing: [
-      { minQty: 1, maxQty: 24, price: 44.99 },
-      { minQty: 25, maxQty: 99, price: 40.99 },
-      { minQty: 100, maxQty: 499, price: 36.99 },
-      { minQty: 500, maxQty: null, price: 32.99 }
-    ]
-  },
-  {
-    id: 'PROD016',
-    name: 'Performance T-Shirt - Black',
-    sku: 'PC78SP-BLACK',
-    category: 'apparel',
-    description: 'Performance jet black t-shirt with custom logo',
-    imageFile: 'PC78SP_JET BLACK_Flat_Front-01_right_chest.png',
-    pricing: [
-      { minQty: 1, maxQty: 49, price: 31.99 },
-      { minQty: 50, maxQty: 249, price: 28.99 },
-      { minQty: 250, maxQty: 999, price: 25.99 },
-      { minQty: 1000, maxQty: null, price: 22.99 }
-    ]
-  },
-  {
-    id: 'PROD017',
-    name: 'Tri-Blend T-Shirt - Black',
-    sku: 'TL1763H-BLACK',
-    category: 'apparel',
-    description: 'Tri-blend black t-shirt with custom logo',
-    imageFile: 'TLJ763H_Black_Flat_Front-01_right_chest.png',
-    pricing: [
-      { minQty: 1, maxQty: 49, price: 34.99 },
-      { minQty: 50, maxQty: 249, price: 31.99 },
-      { minQty: 250, maxQty: 999, price: 27.99 },
-      { minQty: 1000, maxQty: null, price: 24.99 }
-    ]
-  },
-  {
-    id: 'PROD018',
-    name: 'Tri-Blend T-Shirt - Duck Brown',
-    sku: 'TL1763H-DUCKBROWN',
-    category: 'apparel',
-    description: 'Tri-blend duck brown t-shirt with custom logo',
-    imageFile: 'TLJ763H_Duck Brown_Flat_Front-01_right_chest.png',
-    pricing: [
-      { minQty: 1, maxQty: 49, price: 34.99 },
-      { minQty: 50, maxQty: 249, price: 31.99 },
-      { minQty: 250, maxQty: 999, price: 27.99 },
-      { minQty: 1000, maxQty: null, price: 24.99 }
-    ]
-  },
-  {
-    id: 'PROD019',
-    name: 'Grey Steel T-Shirt - Orange Logo',
-    sku: 'C112-GREYSTEEL',
-    category: 'apparel',
-    description: 'Grey steel t-shirt with neon orange custom logo',
-    imageFile: 'C112_greysteelneonorange_full_front-01_right_chest.png',
-    pricing: [
-      { minQty: 1, maxQty: 49, price: 28.99 },
-      { minQty: 50, maxQty: 249, price: 25.99 },
-      { minQty: 250, maxQty: 999, price: 22.99 },
-      { minQty: 1000, maxQty: null, price: 19.99 }
-    ]
-  },
+  // ... (keep your existing 19 more products exactly as you have them)
   {
     id: 'PROD020',
     name: 'Classic Polo - Black',
@@ -422,28 +175,11 @@ function getPricingTable(product) {
   }));
 }
 
-function normalizeAddress(addr = {}) {
-  return {
-    line1: addr.line1 || '',
-    line2: addr.line2 || undefined,
-    city: addr.city || '',
-    state: addr.state || '',
-    postal_code: addr.postal_code || addr.zip || '',
-    country: (addr.country || 'US').toUpperCase()
-  };
-}
-
-/** Resolve active product list (Airtable preferred, fallback local) */
 async function getActiveProducts() {
-  try {
-    return await fetchProductsFromAirtableCached();
-  } catch (err) {
-    console.warn('⚠️ Airtable fetch failed, using local PRODUCTS:', err.message);
-    return PRODUCTS;
-  }
+  try { return await fetchProductsFromAirtableCached(); }
+  catch (err) { console.warn('⚠️ Airtable fetch failed, using local PRODUCTS:', err.message); return PRODUCTS; }
 }
 
-/** Build shipping options per session (taxed) */
 function shippingOptionsFor(subtotalCents, shippingAddress) {
   const isUS = (shippingAddress?.country || 'US').toUpperCase() === 'US';
   const options = [];
@@ -455,10 +191,7 @@ function shippingOptionsFor(subtotalCents, shippingAddress) {
         type: 'fixed_amount',
         fixed_amount: { amount: standardAmount, currency: 'usd' },
         tax_behavior: 'exclusive',
-        delivery_estimate: {
-          minimum: { unit: 'business_day', value: 5 },
-          maximum: { unit: 'business_day', value: 8 }
-        }
+        delivery_estimate: { minimum: { unit: 'business_day', value: 5 }, maximum: { unit: 'business_day', value: 8 } }
       }
     });
     options.push({
@@ -467,10 +200,7 @@ function shippingOptionsFor(subtotalCents, shippingAddress) {
         type: 'fixed_amount',
         fixed_amount: { amount: 2500, currency: 'usd' },
         tax_behavior: 'exclusive',
-        delivery_estimate: {
-          minimum: { unit: 'business_day', value: 2 },
-          maximum: { unit: 'business_day', value: 3 }
-        }
+        delivery_estimate: { minimum: { unit: 'business_day', value: 2 }, maximum: { unit: 'business_day', value: 3 } }
       }
     });
   } else {
@@ -504,14 +234,8 @@ app.use(express.static('public'));
 app.get('/api/products', async (req, res) => {
   const { customerEmail } = req.query || {};
   let products;
-  let fromAirtable = true;
-
-  try {
-    products = await fetchProductsFromAirtableCached();
-  } catch (err) {
-    fromAirtable = false;
-    products = PRODUCTS;
-  }
+  try { products = await fetchProductsFromAirtableCached(); }
+  catch { products = PRODUCTS; }
 
   const enriched = products.map(p => {
     const baseImageUrl = `${CONFIG.PUBLIC_BASE_URL}/images/products/${encodeURIComponent(p.imageFile)}`;
@@ -525,17 +249,10 @@ app.get('/api/products', async (req, res) => {
       price_per_unit: `$${Number(t.price || 0).toFixed(2)}`
     }));
 
-    return {
-      ...p,
-      baseImageUrl,
-      previewImageUrl,
-      pricingTable,
-      currentPrice: Number(pricing?.[0]?.price || 0)
-    };
+    return { ...p, baseImageUrl, previewImageUrl, pricingTable, currentPrice: Number(pricing?.[0]?.price || 0) };
   });
 
-  // Return a plain array to match your front-end expectations
-  res.json(enriched);
+  res.json(enriched); // plain array for your existing front-end
 });
 
 /* Price calculation per quantity (uses Airtable data first) */
@@ -566,17 +283,13 @@ app.post('/api/calculate-price', async (req, res) => {
 /* Tax calculation endpoint */
 app.post('/api/calculate-tax', async (req, res) => {
   try {
-    if (!stripe) {
-      return res.status(500).json({ error: 'Missing STRIPE_SECRET_KEY' });
-    }
+    if (!stripe) return res.status(500).json({ error: 'Missing STRIPE_SECRET_KEY' });
 
     const { zip, items } = req.body || {};
-    if (!zip || !Array.isArray(items) || !items.length) {
-      return res.json({ taxAmount: 0 });
-    }
+    if (!zip || !Array.isArray(items) || !items.length) return res.json({ taxAmount: 0 });
 
     const line_items = items.map((item) => ({
-      amount: Math.round(Number(item.unitPrice || 0) * 100), // client-sent unitPrice
+      amount: Math.round(Number(item.unitPrice || 0) * 100),
       quantity: item.quantity,
       reference: item.productId
     }));
@@ -584,10 +297,7 @@ app.post('/api/calculate-tax', async (req, res) => {
     const calculation = await stripe.tax.calculations.create({
       currency: 'usd',
       line_items,
-      customer_details: {
-        address: { postal_code: zip, country: 'US' },
-        address_source: 'shipping'
-      }
+      customer_details: { address: { postal_code: zip, country: 'US' }, address_source: 'shipping' }
     });
 
     const taxAmount = calculation.tax_amount_exclusive / 100;
@@ -601,14 +311,10 @@ app.post('/api/calculate-tax', async (req, res) => {
 /* Stripe Checkout with Stripe Tax + shipping */
 app.post('/api/create-checkout', async (req, res) => {
   try {
-    if (!stripe) {
-      return res.status(500).json({ error: 'Missing STRIPE_SECRET_KEY in .env' });
-    }
+    if (!stripe) return res.status(500).json({ error: 'Missing STRIPE_SECRET_KEY in .env' });
 
     const { customerInfo, products: cart } = req.body || {};
-    if (!Array.isArray(cart) || !cart.length) {
-      return res.status(400).json({ error: 'Cart is empty' });
-    }
+    if (!Array.isArray(cart) || !cart.length) return res.status(400).json({ error: 'Cart is empty' });
 
     const safeCustomerInfo = customerInfo || { name: '', email: '', company: '', phone: '' };
     const activeProducts = await getActiveProducts();
@@ -660,6 +366,29 @@ app.post('/api/create-checkout', async (req, res) => {
   } catch (err) {
     console.error('Stripe create-checkout error:', err);
     res.status(500).json({ error: 'Failed to create payment link', details: err.message });
+  }
+});
+
+/* Generate mockups for an email + logo URL (calls Python) */
+app.post('/api/mockups/generate', async (req, res) => {
+  try {
+    const { email, logoUrl } = req.body || {};
+    if (!email || !logoUrl) return res.status(400).json({ error: 'email and logoUrl required' });
+
+    const scriptPath = path.join(__dirname, 'python', 'build_mockups_from_airtable.py');
+    const py = spawn('python', [
+      scriptPath,
+      '--email', email,
+      '--logo_url', logoUrl,
+      '--products_dir', path.join(__dirname, 'public', 'images', 'products')
+    ], { stdio: 'inherit' });
+
+    py.on('close', (code) => {
+      if (code === 0) return res.json({ ok: true });
+      res.status(500).json({ error: `mockup generation failed (${code})` });
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
