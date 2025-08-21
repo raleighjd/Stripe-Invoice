@@ -5,7 +5,9 @@ console.log('STRIPE_SECRET_KEY:', process.env.STRIPE_SECRET_KEY);
 const express = require('express');
 const axios = require('axios');
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
+const { uploadFileToS3 } = require('./s3'); // Node S3 uploader (used for base placeholder upload)
 const app = express();
 
 // Initialize Stripe only if we have a valid API key
@@ -99,6 +101,31 @@ async function fetchProductsFromAirtableCached() {
   return fresh;
 }
 
+async function airtableFindRecordIdByProductId(productId) {
+  const url = `https://api.airtable.com/v0/${AIRTABLE.baseId}/${encodeURIComponent(AIRTABLE.table)}`;
+  const params = { filterByFormula: `{product_id}="${productId}"`, maxRecords: 1 };
+  const { data } = await axios.get(url, {
+    params,
+    headers: { Authorization: `Bearer ${AIRTABLE.token}` },
+    timeout: 15000
+  });
+  const rec = (data.records || [])[0];
+  return rec?.id || null;
+}
+
+async function airtableUpdateFields(recordId, fields) {
+  const url = `https://api.airtable.com/v0/${AIRTABLE.baseId}/${encodeURIComponent(AIRTABLE.table)}/${recordId}`;
+  const payload = { fields };
+  const { data } = await axios.patch(url, payload, {
+    headers: {
+      Authorization: `Bearer ${AIRTABLE.token}`,
+      'Content-Type': 'application/json'
+    },
+    timeout: 15000
+  });
+  return data;
+}
+
 // Admin-only: force cache reload
 app.post('/api/admin/reload-products', async (req, res) => {
   try {
@@ -129,7 +156,7 @@ const PRODUCTS = [
       { minQty: 100, maxQty: null, price: 19.99 }
     ]
   },
-  // ... (keep your existing 19 more products exactly as you have them)
+  // ... keep all your existing products through PROD020 ...
   {
     id: 'PROD020',
     name: 'Classic Polo - Black',
@@ -166,13 +193,6 @@ function calculatePrice(product, quantity) {
     (p) => q >= p.minQty && (p.maxQty === null || q <= p.maxQty)
   );
   return tier ? tier.price : product.pricing[0].price;
-}
-
-function getPricingTable(product) {
-  return product.pricing.map((t) => ({
-    quantity_range: t.maxQty ? `${t.minQty}-${t.maxQty}` : `${t.minQty}+`,
-    price_per_unit: `$${Number(t.price).toFixed(2)}`
-  }));
 }
 
 async function getActiveProducts() {
@@ -369,25 +389,121 @@ app.post('/api/create-checkout', async (req, res) => {
   }
 });
 
-/* Generate mockups for an email + logo URL (calls Python) */
-app.post('/api/mockups/generate', async (req, res) => {
+/* ====== Per-product endpoints: boxes, mockup+upload (combined), upload base ====== */
+
+// Save boxes JSON to Airtable "boxes" field for a product_id
+app.post('/api/products/:id/boxes', async (req, res) => {
   try {
+    if (!AIRTABLE.token) return res.status(500).json({ error: 'Airtable not configured' });
+    const productId = req.params.id;
+    const boxes = req.body?.boxes;
+    if (!Array.isArray(boxes) || boxes.length === 0) {
+      return res.status(400).json({ error: 'boxes array required' });
+    }
+    const recordId = await airtableFindRecordIdByProductId(productId);
+    if (!recordId) return res.status(404).json({ error: 'Airtable record not found for product_id' });
+
+    await airtableUpdateFields(recordId, { boxes: JSON.stringify({ boxes }) });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('boxes save error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/**
+ * Generate mockup for a single product:
+ * - Upload base image to S3 as placeholder
+ * - Run Python generator (which uploads mockups to S3)
+ * - Parse JSON manifest from Python stdout
+ * - Update Airtable with mockup URLs + metadata
+ */
+app.post('/api/products/:id/mockup', async (req, res) => {
+  try {
+    const productId = req.params.id;
     const { email, logoUrl } = req.body || {};
     if (!email || !logoUrl) return res.status(400).json({ error: 'email and logoUrl required' });
 
+    // Find product (Airtable preferred, else local)
+    const list = await getActiveProducts();
+    const p = list.find(x => x.id === productId);
+    if (!p) return res.status(404).json({ error: 'Product not found' });
+
+    // 1) Upload base image as placeholder to S3
+    const localPath = path.join(__dirname, 'public', 'images', 'products', p.imageFile);
+    if (!fs.existsSync(localPath)) {
+      return res.status(404).json({ error: `Base image not found on server: ${p.imageFile}` });
+    }
+    const folder = emailToS3Folder(email);
+    const baseKey = `${folder}/mockups/${p.imageFile}`;
+    const ext = (p.imageFile.split('.').pop() || '').toLowerCase();
+    const type = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'application/octet-stream');
+    const baseUrl = await uploadFileToS3(localPath, baseKey, type, true);
+
+    // 2) Run Python generator (uploads outputs); capture JSON manifest from stdout
     const scriptPath = path.join(__dirname, 'python', 'build_mockups_from_airtable.py');
-    const py = spawn('python', [
+    const args = [
       scriptPath,
       '--email', email,
       '--logo_url', logoUrl,
-      '--products_dir', path.join(__dirname, 'public', 'images', 'products')
-    ], { stdio: 'inherit' });
+      '--products_dir', path.join(__dirname, 'public', 'images', 'products'),
+      '--product_id', productId
+    ];
+    let pyStdout = '';
+    let pyStderr = '';
+    const py = spawn('python', args);
+    py.stdout.on('data', (d) => { pyStdout += d.toString(); });
+    py.stderr.on('data', (d) => { pyStderr += d.toString(); });
+    py.on('close', async (code) => {
+      if (code !== 0) {
+        console.error('mockup stderr:', pyStderr);
+        return res.status(500).json({ error: `mockup generation failed (${code})` });
+      }
 
-    py.on('close', (code) => {
-      if (code === 0) return res.json({ ok: true });
-      res.status(500).json({ error: `mockup generation failed (${code})` });
+      let manifest = null;
+      try {
+        // Expect pure JSON from the script
+        manifest = JSON.parse(pyStdout.trim());
+      } catch (e) {
+        console.error('Manifest parse error:', e.message, '\nSTDOUT:', pyStdout);
+        return res.status(500).json({ error: 'Invalid manifest from generator' });
+      }
+
+      // Extract URLs for this product's imageFile
+      const recId = await airtableFindRecordIdByProductId(productId);
+      const nowIso = new Date().toISOString();
+
+      // Try to resolve urls from manifest product_map; fall back to baseUrl
+      const imageFile = p.imageFile;
+      const pm = (manifest.product_map && manifest.product_map[imageFile]) || {};
+      const pngUrl = (pm.png_urls && pm.png_urls[0]) || baseUrl;
+      const pdfUrl = (pm.pdf_urls && pm.pdf_urls[0]) || null;
+      const previewUrl = (pm.preview_urls && pm.preview_urls[0]) || null;
+
+      // 3) Update Airtable with URLs + metadata
+      if (recId) {
+        const fields = {
+          last_mockup_url: pngUrl,
+          last_mockup_pdf_url: pdfUrl,
+          last_mockup_preview_url: previewUrl,
+          last_mockup_email: email,
+          last_mockup_at: nowIso,
+          last_mockup_s3_key: `${folder}/mockups/${p.imageFile}`,
+          last_mockup_status: 'uploaded'
+        };
+        try { await airtableUpdateFields(recId, fields); }
+        catch (e) { console.warn('Airtable update (mockup) warning:', e.message); }
+      }
+
+      res.json({
+        ok: true,
+        placeholder_base_url: baseUrl,
+        mockup: { pngUrl, pdfUrl, previewUrl },
+        manifest
+      });
     });
   } catch (e) {
+    console.error('mockup error:', e);
     res.status(500).json({ error: e.message });
   }
 });
