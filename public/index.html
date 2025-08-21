@@ -637,20 +637,6 @@
       }
     }
 
-      // Accept either an array or an object with a products array
-      window.products = Array.isArray(payload) ? payload : (payload?.products || []);
-      if (!Array.isArray(window.products)) window.products = [];
-
-      renderProducts(window.products);
-      (window.showMessage || console.log)(`Loaded ${window.products.length} products`);
-    } catch (err) {
-      console.error('loadProducts error:', err);
-      window.products = [];
-      renderProducts([]);                 // keep the UI up instead of white screen
-      (window.showMessage || console.log)('Could not load products.');
-      }
-    }
-
     // Render products
     function renderProducts(products) {
       const container = document.getElementById('productGrid');
