@@ -604,49 +604,57 @@
     }
 
     // Load products
-    async function loadProducts() {
-      try {
-        const email = document.getElementById('customerEmail').value.trim();
-        const url = email ? `/api/products?customerEmail=${encodeURIComponent(email)}` : '/api/products';
-        
-        console.log('🔄 Loading products from:', url);
-        
-        const response = await fetch(url);
-        products = await response.json();
-        
-        console.log('✅ Products loaded:', products.length);
-        
-        // Debug image URLs
-        if (email) {
-          console.log('🖼️ Sample image URLs:');
-          products.slice(0, 3).forEach(p => {
-            console.log(`- ${p.name}: ${p.previewImageUrl}`);
-          });
-        } else {
-          console.log('ℹ️ No email provided - using fallback images');
+    <script>
+  async function loadProducts() {
+    try {
+      const email = (document.getElementById('customerEmail')?.value || '').trim();
+      const url = email ? `/api/products?customerEmail=${encodeURIComponent(email)}` : '/api/products';
+
+      const resp = await fetch(url, { cache: 'no-store' });
+      const payload = await resp.json().catch(() => ([]));
+
+      // Accept either an array or an object with a products array
+      window.products = Array.isArray(payload) ? payload : (payload?.products || []);
+      if (!Array.isArray(window.products)) window.products = [];
+
+      renderProducts(window.products);
+      (window.showMessage || console.log)(`Loaded ${window.products.length} products`);
+    } catch (err) {
+      console.error('loadProducts error:', err);
+      window.products = [];
+      renderProducts([]);                 // keep the UI up instead of white screen
+      (window.showMessage || console.log)('Could not load products.');
+      <script>
+  // After rendering, verify preview images; on error swap to base
+  setTimeout(() => {
+    (list || []).forEach(product => {
+      const tryUrl = product.previewImageUrl || product.baseImageUrl;
+      if (!tryUrl) return;
+      const testImg = new Image();
+      testImg.onerror = () => {
+        const el = document.querySelector(`[data-product-id="${product.id}"]`);
+        if (el && product.baseImageUrl) {
+          el.style.backgroundImage = `url('${product.baseImageUrl}')`;
         }
-        
-        renderProducts();
-      } catch (error) {
-        console.error('❌ Failed to load products:', error);
-        const container = document.getElementById('productGrid');
-        container.innerHTML = `
-          <div class="empty-state">
-            <h3>No products found</h3>
-            <p>Unable to load product catalog</p>
-          </div>
-        `;
-        return;
-      }
+      };
+      testImg.src = tryUrl;
+    });
+  }, 0);
+</script>
     }
+  }
+</script>
+
+
 
     // Render products
     function renderProducts() {
       const container = document.getElementById('productGrid');
       if (!container) return;
       
-      const html = (products || []).map(product => {
-        const imageUrl = product.previewImageUrl || product.baseImageUrl || '';
+      const imageUrl = product.previewImageUrl || product.baseImageUrl;   // base fallback
+      const imageStyle = imageUrl ? `style="background-image:url('${imageUrl}')" ` : '';
+
         const basePrice = product.currentPrice || (product.pricing && product.pricing[0] ? product.pricing[0].price : 0);
         
         // Generate pricing tiers HTML
