@@ -691,6 +691,10 @@
               
               <div id="price-${product.id}" class="product-price">Starting at $${basePrice.toFixed(2)}</div>
               <div id="savings-${product.id}" class="savings-badge" style="display:none;"></div>
+              
+              <button class="btn" style="width: 100%; margin-top: 12px; background: var(--primary); color: white; border-color: var(--primary);" onclick="generateMockup('${product.id}')">
+                🎨 Generate Mockup
+              </button>
             </div>
           </div>
         `;
@@ -934,6 +938,63 @@
       } finally {
         btn.disabled = false;
         btn.textContent = '🚀 Get Final Quote & Checkout';
+      }
+    }
+
+    // Generate mockup for specific product
+    async function generateMockup(productId) {
+      console.log('Generating mockup for product:', productId);
+      
+      // Get customer email (required for S3 folder structure)
+      let email = document.getElementById('customerEmail').value.trim();
+      if (!email) {
+        email = prompt('Customer email for S3 folder (required):');
+        if (!email) {
+          showMessage('Email is required for mockup generation', 'error');
+          return;
+        }
+        document.getElementById('customerEmail').value = email;
+      }
+      
+      // Get logo URL
+      const logoUrl = prompt('Logo URL (PNG recommended):', '');
+      if (!logoUrl) {
+        showMessage('Logo URL is required for mockup generation', 'error');
+        return;
+      }
+      
+      // Find the button to show loading state
+      const button = event.target;
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = '⏳ Generating...';
+      
+      try {
+        showMessage('Generating mockup and uploading to S3...', 'success');
+        
+        const response = await fetch(`/api/products/${encodeURIComponent(productId)}/mockup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, logoUrl })
+        });
+        
+        const result = await response.json();
+        
+        if (!response.ok || !result.ok) {
+          throw new Error(result.error || 'Mockup generation failed');
+        }
+        
+        showMessage(`✅ Mockup generated and uploaded to S3! Refreshing products...`, 'success');
+        
+        // Refresh products to show the new mockup
+        await loadProducts();
+        
+      } catch (error) {
+        console.error('Mockup generation error:', error);
+        showMessage(`❌ Mockup generation failed: ${error.message}`, 'error');
+      } finally {
+        button.disabled = false;
+        button.textContent = originalText;
       }
     }
   </script>
