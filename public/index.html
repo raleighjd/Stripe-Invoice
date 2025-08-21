@@ -605,12 +605,37 @@
 
     // Load products
     async function loadProducts() {
-    try {
-      const email = (document.getElementById('customerEmail')?.value || '').trim();
-      const url = email ? `/api/products?customerEmail=${encodeURIComponent(email)}` : '/api/products';
+      try {
+        console.log('Loading products...');
+        const email = (document.getElementById('customerEmail')?.value || '').trim();
+        const url = email ? `/api/products?customerEmail=${encodeURIComponent(email)}` : '/api/products';
+        
+        console.log('Fetching from:', url);
+        const resp = await fetch(url, { cache: 'no-store' });
+        console.log('Response status:', resp.status);
+        
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+        }
+        
+        const payload = await resp.json();
+        console.log('Received payload:', payload);
 
-      const resp = await fetch(url, { cache: 'no-store' });
-      const payload = await resp.json().catch(() => ([]));
+        // Accept either an array or an object with a products array
+        products = Array.isArray(payload) ? payload : (payload?.products || []);
+        if (!Array.isArray(products)) products = [];
+        
+        console.log('Processed products:', products.length);
+        renderProducts(products);
+        showMessage(`Loaded ${products.length} products`, 'success');
+        
+      } catch (err) {
+        console.error('loadProducts error:', err);
+        products = [];
+        renderProducts([]);
+        showMessage('Could not load products: ' + err.message, 'error');
+      }
+    }
 
       // Accept either an array or an object with a products array
       window.products = Array.isArray(payload) ? payload : (payload?.products || []);
@@ -690,6 +715,8 @@
 
     // Load branded mockups
     function loadBrandedMockups() {
+      console.log('Loading branded mockups...');
+      showMessage('Loading products with branded mockups...', 'success');
       loadProducts();
     }
 
