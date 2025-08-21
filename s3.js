@@ -1,47 +1,49 @@
 // s3.js
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
-const fs = require('fs');
-const path = require('path');
 
-const REGION = process.env.AWS_REGION || 'us-east-2';
-const BUCKET = process.env.AWS_BUCKET_NAME;
-const BASE_URL = (process.env.AWS_BUCKET_URL || '').replace(/\/$/,'');
+const AWS_REGION = process.env.AWS_REGION || 'us-east-2';
+const AWS_BUCKET_NAME = process.env.AWS_BUCKET_NAME || '';
+const AWS_BUCKET_URL = (process.env.AWS_BUCKET_URL || '').replace(/\/$/, '');
 
-if (!BUCKET) {
+if (!AWS_BUCKET_NAME) {
   console.warn('⚠️ AWS_BUCKET_NAME not set. s3.js will not be able to upload.');
 }
 
-const s3 = new S3Client({ region: REGION });
+const s3 = (AWS_BUCKET_NAME
+  ? new S3Client({
+      region: AWS_REGION,
+      credentials: process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
+        ? {
+            accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+          }
+        : undefined,
+    })
+  : null);
 
-async function uploadFileToS3(localPath, s3Key, contentType = 'application/octet-stream', publicRead = true) {
-  const Body = fs.readFileSync(localPath);
-  const cmd = new PutObjectCommand({
-    Bucket: BUCKET,
-    Key: s3Key,
-    Body,
-    ContentType: contentType,
-    ACL: publicRead ? 'public-read' : undefined
-  });
-  await s3.send(cmd);
-  return `${BASE_URL}/${s3Key}`;
+function s3Ready() {
+  return !!(s3 && AWS_BUCKET_NAME);
 }
 
-async function uploadFolderToS3(localDir, s3Prefix) {
-  const entries = fs.readdirSync(localDir);
-  const results = [];
-  for (const name of entries) {
-    const full = path.join(localDir, name);
-    if (!fs.statSync(full).isFile()) continue;
-    const ext = path.extname(name).toLowerCase();
-    const type = ext === '.png' ? 'image/png'
-               : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
-               : ext === '.pdf' ? 'application/pdf'
-               : 'application/octet-stream';
-    const key = `${s3Prefix.replace(/\/$/,'')}/${name}`;
-    const url = await uploadFileToS3(full, key, type, true);
-    results.push(url);
-  }
-  return results;
+async function uploadBuffer(key, buffer, contentType = 'application/octet-stream') {
+  if (!s3Ready()) throw new Error('S3 not configured');
+
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: AWS_BUCKET_NAME,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType,
+      ACL: 'public-read',
+    })
+  );
+  return key;
 }
 
-module.exports = { uploadFileToS3, uploadFolderToS3 };
+function urlForKey(key) {
+  // Prefer explicit bucket URL if given, otherwise standard virtual-host style
+  if (AWS_BUCKET_URL) return `${AWS_BUCKET_URL}/${key}`;
+  return `https://${AWS_BUCKET_NAME}.s3.${AWS_REGION}.amazonaws.com/${encodeURI(key)}`;
+}
+
+module.exports = { uploadBuffer, urlForKey, s3Ready };
