@@ -630,23 +630,6 @@
       } catch (error) {
         console.error('❌ Failed to load products:', error);
         const container = document.getElementById('productGrid');
-        if (container) {
-          container.innerHTML = `
-            <div class="empty-state">
-              <h3>Failed to load products</h3>
-              <p>Please try refreshing the page</p>
-            </div>
-          `;
-        }
-      }
-    }
-
-    // Render products
-    function renderProducts() {
-      const container = document.getElementById('productGrid');
-      if (!container) return;
-      
-      if (!products || products.length === 0) {
         container.innerHTML = `
           <div class="empty-state">
             <h3>No products found</h3>
@@ -655,8 +638,14 @@
         `;
         return;
       }
+    }
 
-      const html = products.map(product => {
+    // Render products
+    function renderProducts() {
+      const container = document.getElementById('productGrid');
+      if (!container) return;
+      
+      const html = (products || []).map(product => {
         const imageUrl = product.previewImageUrl || product.baseImageUrl || '';
         const basePrice = product.currentPrice || (product.pricing && product.pricing[0] ? product.pricing[0].price : 0);
         
@@ -704,26 +693,22 @@
       
       // Set up image fallback handling
       setTimeout(() => {
-        products.forEach(product => {
+        (products || []).forEach(product => {
           const urlToTry = product.previewImageUrl || product.baseImageUrl;
           if (!urlToTry) return;
           
           const testImg = new Image();
           testImg.onerror = () => {
             const card = container.querySelector(`[data-product-id="${product.id}"] .product-image`);
-            if (card && product.baseImageUrl && product.baseImageUrl !== urlToTry) {
+            if (card && product.baseImageUrl) {
               card.style.backgroundImage = `url('${product.baseImageUrl}')`;
             }
           };
           testImg.src = urlToTry;
         });
-      }, 100);
+      }, 0);
     }
 
-    // Load branded mockups
-    function loadBrandedMockups() {
-      loadProducts();
-    }
     function adjustQuantity(productId, delta) {
       const input = document.getElementById(`qty-${productId}`);
       const newValue = Math.max(0, parseInt(input.value || '0') + delta);
@@ -944,18 +929,8 @@
           showMessage('Redirecting to secure checkout...', 'success');
           window.location = data.url;
         } else {
-        container.innerHTML = `
-          <div class="empty-state">
-            <h3>No products found</h3>
-            <p>Unable to load product catalog</p>
-          </div>
-        `;
-        return;
-      }
-
-      const html = products.map(product => {
-        const imageUrl = product.previewImageUrl || product.baseImageUrl || `/images/products/${product.imageFile || ''}`;
-        renderProducts(products);
+          showMessage('Checkout failed: ' + (data.error || 'Unknown error'), 'error');
+        }
       } catch (error) {
         showMessage('Checkout failed: ' + error.message, 'error');
         console.error('Checkout error:', error);
