@@ -418,6 +418,7 @@ app.post('/api/products/:id/boxes', async (req, res) => {
  * - Parse JSON manifest from Python stdout
  * - Update Airtable with mockup URLs + metadata
  */
+// server.js  — REPLACE the existing /api/products/:id/mockup handler with this one
 app.post('/api/products/:id/mockup', async (req, res) => {
   try {
     const productId = req.params.id;
@@ -429,18 +430,25 @@ app.post('/api/products/:id/mockup', async (req, res) => {
     const p = list.find(x => x.id === productId);
     if (!p) return res.status(404).json({ error: 'Product not found' });
 
-    // 1) Upload base image as placeholder to S3
+    // 1) Try to upload base image as placeholder if it exists locally; otherwise fallback to public URL
     const localPath = path.join(__dirname, 'public', 'images', 'products', p.imageFile);
-    if (!fs.existsSync(localPath)) {
-      return res.status(404).json({ error: `Base image not found on server: ${p.imageFile}` });
-    }
     const folder = emailToS3Folder(email);
     const baseKey = `${folder}/mockups/${p.imageFile}`;
     const ext = (p.imageFile.split('.').pop() || '').toLowerCase();
     const type = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'application/octet-stream');
-    const baseUrl = await uploadFileToS3(localPath, baseKey, type, true);
 
-    // 2) Run Python generator (uploads outputs); capture JSON manifest from stdout
+    let placeholderBaseUrl = `${CONFIG.PUBLIC_BASE_URL}/images/products/${encodeURIComponent(p.imageFile)}`;
+    if (fs.existsSync(localPath) && typeof uploadFileToS3 === 'function') {
+      try {
+        placeholderBaseUrl = await uploadFileToS3(localPath, baseKey, type, true);
+      } catch (e) {
+        console.warn('Placeholder upload failed, continuing with public URL fallback:', e.message);
+      }
+    } else {
+      console.warn(`Base image not on disk (${p.imageFile}); using public URL fallback.`);
+    }
+
+    // 2) Run Python generator (it will also upload mockups and can fetch the base image if missing)
     const scriptPath = path.join(__dirname, 'python', 'build_mockups_from_airtable.py');
     const args = [
       scriptPath,
@@ -461,26 +469,21 @@ app.post('/api/products/:id/mockup', async (req, res) => {
       }
 
       let manifest = null;
-      try {
-        // Expect pure JSON from the script
-        manifest = JSON.parse(pyStdout.trim());
-      } catch (e) {
+      try { manifest = JSON.parse(pyStdout.trim()); }
+      catch (e) {
         console.error('Manifest parse error:', e.message, '\nSTDOUT:', pyStdout);
         return res.status(500).json({ error: 'Invalid manifest from generator' });
       }
 
-      // Extract URLs for this product's imageFile
+      // Update Airtable with URLs + metadata for this product
       const recId = await airtableFindRecordIdByProductId(productId);
       const nowIso = new Date().toISOString();
-
-      // Try to resolve urls from manifest product_map; fall back to baseUrl
       const imageFile = p.imageFile;
       const pm = (manifest.product_map && manifest.product_map[imageFile]) || {};
-      const pngUrl = (pm.png_urls && pm.png_urls[0]) || baseUrl;
+      const pngUrl = (pm.png_urls && pm.png_urls[0]) || placeholderBaseUrl;
       const pdfUrl = (pm.pdf_urls && pm.pdf_urls[0]) || null;
       const previewUrl = (pm.preview_urls && pm.preview_urls[0]) || null;
 
-      // 3) Update Airtable with URLs + metadata
       if (recId) {
         const fields = {
           last_mockup_url: pngUrl,
@@ -497,7 +500,7 @@ app.post('/api/products/:id/mockup', async (req, res) => {
 
       res.json({
         ok: true,
-        placeholder_base_url: baseUrl,
+        placeholder_base_url: placeholderBaseUrl,
         mockup: { pngUrl, pdfUrl, previewUrl },
         manifest
       });

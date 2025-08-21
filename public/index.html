@@ -641,6 +641,7 @@
     function renderProducts(products) {
   // Pick a container (adjust the selector to your page if needed)
   const container =
+    document.querySelector('#productGrid') ||
     document.querySelector('#productsGrid') ||
     document.querySelector('#products-grid') ||
     document.querySelector('#products') ||
