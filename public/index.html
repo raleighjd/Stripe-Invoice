@@ -695,6 +695,10 @@
               <button class="btn" style="width: 100%; margin-top: 12px; background: var(--primary); color: white; border-color: var(--primary);" onclick="generateMockup('${product.id}')">
                 🎨 Generate Mockup
               </button>
+              
+              <button class="btn" style="width: 100%; margin-top: 8px; background: var(--accent); color: white; border-color: var(--accent);" onclick="openBBoxModal('${product.id}')">
+                📐 Set Logo Position
+              </button>
             </div>
           </div>
         `;
@@ -710,6 +714,155 @@
       loadProducts();
     }
 
+    // Open BBox Modal for positioning
+    function openBBoxModal(productId) {
+      const product = products.find(p => p.id === productId);
+      if (!product) {
+        showMessage('Product not found', 'error');
+        return;
+      }
+      
+      // Create modal if it doesn't exist
+      let modal = document.getElementById('bboxModal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'bboxModal';
+        modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;';
+        modal.innerHTML = `
+          <div style="background:#fff; border-radius:12px; padding:16px; max-width:90vw; max-height:90vh;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+              <strong id="bboxTitle">Set Logo Position</strong>
+              <span style="flex:1"></span>
+              <button id="bboxClose" style="border:none;background:#eee;padding:6px 10px;border-radius:6px;cursor:pointer;">Close</button>
+            </div>
+            <div id="bboxCanvasWrap" style="position:relative; overflow:auto; border:1px solid #eee; border-radius:8px;">
+              <img id="bboxImg" src="" alt="product" style="max-width:85vw; max-height:70vh; display:block;">
+              <canvas id="bboxCanvas" style="position:absolute; left:0; top:0;"></canvas>
+            </div>
+            <div style="display:flex; gap:8px; margin-top:12px; align-items:center;">
+              <label>Area name</label>
+              <input id="bboxAreaName" type="text" value="right_chest" style="padding:6px 8px;border:1px solid #ccc;border-radius:6px;">
+              <span style="flex:1"></span>
+              <button id="bboxClear" style="background:#eee;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;">Clear</button>
+              <button id="bboxSave"  style="background:#111;color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;">Save Position</button>
+            </div>
+          </div>`;
+        document.body.appendChild(modal);
+      }
+      
+      const imgEl = document.getElementById('bboxImg');
+      const canvas = document.getElementById('bboxCanvas');
+      const title = document.getElementById('bboxTitle');
+      const areaInput = document.getElementById('bboxAreaName');
+      
+      title.textContent = `Set Logo Position — ${product.name}`;
+      imgEl.src = product.baseImageUrl;
+      
+      let start = null;
+      let rect = null;
+      
+      function resizeCanvas() {
+        canvas.width  = imgEl.clientWidth;
+        canvas.height = imgEl.clientHeight;
+        canvas.style.width  = imgEl.clientWidth + 'px';
+        canvas.style.height = imgEl.clientHeight + 'px';
+        draw();
+      }
+      
+      function draw() {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        if (!rect) return;
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#e53e3e';
+        ctx.setLineDash([6,4]);
+        const {x,y,w,h} = rect;
+        ctx.strokeRect(x,y,w,h);
+      }
+      
+      function toNaturalCoords(r) {
+        const scaleX = imgEl.naturalWidth  / imgEl.clientWidth;
+        const scaleY = imgEl.naturalHeight / imgEl.clientHeight;
+        const x1 = Math.round(r.x * scaleX);
+        const y1 = Math.round(r.y * scaleY);
+        const x2 = Math.round((r.x + r.w) * scaleX);
+        const y2 = Math.round((r.y + r.h) * scaleY);
+        return { x1, y1, x2, y2 };
+      }
+      
+      function onDown(ev) {
+        const b = canvas.getBoundingClientRect();
+        start = { x: ev.clientX - b.left, y: ev.clientY - b.top };
+        rect = { x:start.x, y:start.y, w:0, h:0 };
+        draw();
+      }
+      function onMove(ev) {
+        if (!start) return;
+        const b = canvas.getBoundingClientRect();
+        const x = ev.clientX - b.left, y = ev.clientY - b.top;
+        rect.w = x - rect.x; rect.h = y - rect.y;
+        draw();
+      }
+      function onUp() { start = null; }
+      
+      function clearBox() { rect = null; draw(); }
+      
+      async function saveBox() {
+        if (!rect) { 
+          showMessage('Draw a box first by clicking and dragging on the image', 'error'); 
+          return; 
+        }
+        const n = toNaturalCoords({
+          x: Math.min(rect.x, rect.x+rect.w),
+          y: Math.min(rect.y, rect.y+rect.h),
+          w: Math.abs(rect.w),
+          h: Math.abs(rect.h)
+        });
+        const payload = {
+          boxes: [{ name: (areaInput.value || 'right_chest'), x1:n.x1, y1:n.y1, x2:n.x2, y2:n.y2 }]
+        };
+        
+        try {
+          const response = await fetch(`/api/products/${encodeURIComponent(product.id)}/boxes`, {
+            method: 'POST',
+            headers: { 'Content-Type':'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const result = await response.json();
+          if (!response.ok || !result.ok) {
+            throw new Error(result.error || 'Save failed');
+          }
+          showMessage('✅ Logo position saved successfully!', 'success');
+          close();
+        } catch (err) {
+          console.error(err);
+          showMessage('❌ Failed to save position: ' + err.message, 'error');
+        }
+      }
+      
+      function open() {
+        modal.style.display = 'flex';
+        setTimeout(() => resizeCanvas(), 50);
+      }
+      function close() {
+        modal.style.display = 'none';
+        canvas.removeEventListener('mousedown', onDown);
+        canvas.removeEventListener('mousemove', onMove);
+        canvas.removeEventListener('mouseup',   onUp);
+      }
+      
+      document.getElementById('bboxClose').onclick = close;
+      document.getElementById('bboxClear').onclick = clearBox;
+      document.getElementById('bboxSave').onclick  = saveBox;
+      imgEl.onload = resizeCanvas;
+      window.addEventListener('resize', resizeCanvas);
+      
+      canvas.addEventListener('mousedown', onDown);
+      canvas.addEventListener('mousemove', onMove);
+      canvas.addEventListener('mouseup',   onUp);
+      
+      open();
+    }
     function adjustQuantity(productId, delta) {
       const input = document.getElementById(`qty-${productId}`);
       const newValue = Math.max(0, parseInt(input.value || '0') + delta);
