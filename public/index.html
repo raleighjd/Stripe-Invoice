@@ -624,37 +624,26 @@
       window.products = [];
       renderProducts([]);                 // keep the UI up instead of white screen
       (window.showMessage || console.log)('Could not load products.');
-      <script>
-  // After rendering, verify preview images; on error swap to base
-  setTimeout(() => {
-    (list || []).forEach(product => {
-      const tryUrl = product.previewImageUrl || product.baseImageUrl;
-      if (!tryUrl) return;
-      const testImg = new Image();
-      testImg.onerror = () => {
-        const el = document.querySelector(`[data-product-id="${product.id}"]`);
-        if (el && product.baseImageUrl) {
-          el.style.backgroundImage = `url('${product.baseImageUrl}')`;
-        }
-      };
-      testImg.src = tryUrl;
-    });
-  }, 0);
-</script>
+      }
     }
-  }
-</script>
-
-
 
     // Render products
-    function renderProducts() {
+    function renderProducts(products) {
       const container = document.getElementById('productGrid');
       if (!container) return;
-      
-      const imageUrl = product.previewImageUrl || product.baseImageUrl;   // base fallback
-      const imageStyle = imageUrl ? `style="background-image:url('${imageUrl}')" ` : '';
 
+      if (!products || products.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <h3>No products available</h3>
+            <p>Please check back later</p>
+          </div>
+        `;
+        return;
+      }
+
+      const html = products.map(product => {
+        const imageUrl = product.previewImageUrl || product.baseImageUrl || '';
         const basePrice = product.currentPrice || (product.pricing && product.pricing[0] ? product.pricing[0].price : 0);
         
         // Generate pricing tiers HTML
@@ -698,23 +687,11 @@
       }).join('');
       
       container.innerHTML = html;
-      
-      // Set up image fallback handling
-      setTimeout(() => {
-        (products || []).forEach(product => {
-          const urlToTry = product.previewImageUrl || product.baseImageUrl;
-          if (!urlToTry) return;
-          
-          const testImg = new Image();
-          testImg.onerror = () => {
-            const card = container.querySelector(`[data-product-id="${product.id}"] .product-image`);
-            if (card && product.baseImageUrl) {
-              card.style.backgroundImage = `url('${product.baseImageUrl}')`;
-            }
-          };
-          testImg.src = urlToTry;
-        });
-      }, 0);
+    }
+
+    // Load branded mockups
+    function loadBrandedMockups() {
+      loadProducts();
     }
 
     function adjustQuantity(productId, delta) {
