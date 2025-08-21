@@ -1,6 +1,6 @@
 import os, json, tempfile, argparse, shutil, mimetypes
 import requests
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 # Try to import SDK; otherwise use REST
 USE_AIRTABLE_SDK = False
@@ -26,7 +26,6 @@ def download_logo(logo_url, dest_dir):
     ensure_dir(dest_dir)
     fn = os.path.basename(urlparse(logo_url).path) or "logo.png"
     if '.' not in fn:
-        # attempt by HEAD
         try:
             head = requests.head(logo_url, timeout=10)
             ct = head.headers.get('content-type','').split(';')[0]
@@ -57,6 +56,32 @@ def airtable_fetch_records_pat(base_id, table_name, pat_token):
         params["offset"] = offset
     return rows
 
+def ensure_base_image_local(image_file, preferred_dir, fallback_public_base_url, work_root):
+    """
+    Return a directory that contains `image_file`. Prefer `preferred_dir`.
+    If not present, try downloading from <fallback_public_base_url>/images/products/<image_file>
+    into work_root/'products' and return that directory. If download fails, return preferred_dir.
+    """
+    preferred_path = os.path.join(preferred_dir, image_file)
+    if os.path.isfile(preferred_path):
+        return preferred_dir
+
+    if not fallback_public_base_url:
+        return preferred_dir
+
+    try:
+        tmp_dir = os.path.join(work_root, 'products')
+        ensure_dir(tmp_dir)
+        url = f"{fallback_public_base_url.rstrip('/')}/images/products/{quote(image_file)}"
+        r = requests.get(url, timeout=60)
+        r.raise_for_status()
+        with open(os.path.join(tmp_dir, image_file), "wb") as f:
+            f.write(r.content)
+        return tmp_dir
+    except Exception as e:
+        print(f"⚠️  Could not download base image {image_file}: {e}", flush=True)
+        return preferred_dir
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--email", required=True)
@@ -66,14 +91,14 @@ def main():
     args = ap.parse_args()
 
     # ENV
-    AIRTABLE_PAT    = os.environ.get("AIRTABLE_PAT")
-    AIRTABLE_BASE_ID= os.environ.get("AIRTABLE_BASE_ID")
-    AIRTABLE_TABLE  = os.environ.get("AIRTABLE_TABLE_NAME", "Products")
-    AWS_BUCKET_NAME = os.environ.get("AWS_BUCKET_NAME")
+    AIRTABLE_PAT     = os.environ.get("AIRTABLE_PAT")
+    AIRTABLE_BASE_ID = os.environ.get("AIRTABLE_BASE_ID")
+    AIRTABLE_TABLE   = os.environ.get("AIRTABLE_TABLE_NAME", "Products")
+    AWS_BUCKET_NAME  = os.environ.get("AWS_BUCKET_NAME")
+    PUBLIC_BASE_URL  = os.environ.get("PUBLIC_BASE_URL")  # used for fallback download
 
     if not AIRTABLE_BASE_ID or not AIRTABLE_PAT:
         raise SystemExit("Missing AIRTABLE_BASE_ID or AIRTABLE_PAT")
-    # If BUCKET is missing, we still generate locally; upload will be skipped.
 
     # Fetch rows
     if USE_AIRTABLE_SDK:
@@ -106,19 +131,30 @@ def main():
     # Temp work dirs
     work = tempfile.mkdtemp(prefix="mockups_")
     logos_dir = os.path.join(work, "logos")
-    out_dir   = os.path.join(work, "out")       # PNGs
-    pdf_dir   = os.path.join(work, "pdf")       # PDFs
-    prev_dir  = os.path.join(work, "preview")   # previews
+    out_dir   = os.path.join(work, "out")      # PNGs
+    pdf_dir   = os.path.join(work, "pdf")      # PDFs
+    prev_dir  = os.path.join(work, "preview")  # previews
     ensure_dir(out_dir); ensure_dir(pdf_dir); ensure_dir(prev_dir)
 
     # Download logo
     logo_path = download_logo(args.logo_url, logos_dir)
     info = (os.path.basename(logo_path), 1, 1)
 
+    # If we’re targeting a single product, make sure its base image exists locally (fallback to PUBLIC_BASE_URL)
+    products_dir_for_run = args.products_dir
+    if len(mockup_config.keys()) == 1:
+        image_file = next(iter(mockup_config.keys()))
+        products_dir_for_run = ensure_base_image_local(
+            image_file,
+            args.products_dir,
+            PUBLIC_BASE_URL,
+            work
+        )
+
     # Generate
     _ = process_single_logo(
         info,
-        products_dir=args.products_dir,
+        products_dir=products_dir_for_run,
         output_dir=out_dir,
         pdf_output_dir=pdf_dir,
         preview_output_dir=prev_dir,
@@ -130,9 +166,7 @@ def main():
     email_folder = args.email.lower().replace("@","_at_").replace(".","_dot_")
     s3_prefix = f"{email_folder}/mockups"
 
-    uploaded_png = []
-    uploaded_pdf = []
-    uploaded_prev = []
+    uploaded_png, uploaded_pdf, uploaded_prev = [], [], []
     if AWS_BUCKET_NAME:
         uploaded_png  = upload_folder_to_s3(out_dir,  s3_prefix)
         uploaded_pdf  = upload_folder_to_s3(pdf_dir,  s3_prefix)
