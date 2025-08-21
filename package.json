@@ -8,7 +8,9 @@
         "dev": "nodemon server.js"
     },
     "dependencies": {
-        "axios": "^1.6.0",
+        "@aws-sdk/client-s3": "^3.872.0",
+        "airtable": "^0.12.2",
+        "axios": "^1.11.0",
         "cors": "^2.8.5",
         "dotenv": "^16.6.1",
         "express": "^4.21.2",

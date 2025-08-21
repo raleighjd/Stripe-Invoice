@@ -638,74 +638,73 @@
     }
 
     // Render products
-    function renderProducts() {
-      const grid = document.getElementById('productGrid');
-      grid.innerHTML = products.map(product => {
-        const imageStyle = product.previewImageUrl ? 
-          `style="background-image:url('${product.previewImageUrl}')"` : '';
-        
-        const tiers = product.pricingTable.map(tier => `
-          <div class="pricing-tier" data-range="${tier.quantity_range}">
-            <span>${tier.quantity_range}</span>
-            <span>${tier.price_per_unit}</span>
-          </div>
-        `).join('');
+    function renderProducts(products) {
+  // Pick a container (adjust the selector to your page if needed)
+  const container =
+    document.querySelector('#productsGrid') ||
+    document.querySelector('#products-grid') ||
+    document.querySelector('#products') ||
+    document.body;
 
-        return `
-          <div class="product-card">
-            <div class="product-image" ${imageStyle} data-product-id="${product.id}">
-              ${product.previewImageUrl ? '' : '📷 No Preview'}
-            </div>
-            <div class="product-info">
-              <div class="product-name">${product.name}</div>
-              <div class="product-sku">${product.sku}</div>
-              <div class="product-desc">${product.description}</div>
-              
-              <div class="pricing-tiers">${tiers}</div>
-              
-              <div class="quantity-controls">
-                <button class="qty-btn" onclick="adjustQuantity('${product.id}', -1)">−</button>
-                <input class="qty-input" id="qty-${product.id}" type="number" value="0" min="0" 
-                       onchange="updateProductPricing('${product.id}'); updateQuote()"/>
-                <button class="qty-btn" onclick="adjustQuantity('${product.id}', 1)">+</button>
-              </div>
-              
-              <div class="product-price" id="price-${product.id}">
-                Starting at ${(product.currentPrice || 0).toFixed(2)}
-              </div>
-              <div class="savings-badge" id="savings-${product.id}" style="display:none;"></div>
-            </div>
-          </div>
-        `;
-      }).join('');
+  // Build the cards
+  const html = (products || []).map(product => {
+    const imageUrl = product.previewImageUrl || product.baseImageUrl || '';
+    const price = typeof product.currentPrice === 'number'
+      ? `$${product.currentPrice.toFixed(2)}`
+      : '';
 
-      // Initialize pricing for all products
-      products.forEach(product => updateProductPricing(product.id));
-      
-      // Add image error handling for product images
-      setTimeout(() => {
-        products.forEach(product => {
-          if (product.previewImageUrl) {
-            const testImg = new Image();
-            testImg.onload = () => {
-              console.log(`✅ Product image loaded: ${product.name}`);
-            };
-            testImg.onerror = () => {
-              console.log(`❌ Product image failed: ${product.name} - ${product.previewImageUrl}`);
-              // Update the product card to show error state
-              const productImage = document.querySelector(`[data-product-id="${product.id}"]`);
-              if (productImage) {
-                productImage.style.backgroundImage = 'none';
-                productImage.innerHTML = '❌ Image Failed';
-                productImage.style.color = '#E53E3E';
-                productImage.style.fontWeight = '600';
-              }
-            };
-            testImg.src = product.previewImageUrl;
-          }
-        });
-      }, 500);
-    }
+    return `
+      <div class="product-card" data-product-id="${product.id}">
+        <div class="product-image"
+             style="background-image:url('${imageUrl}');"
+             role="img"
+             aria-label="${(product.name || 'Product').replace(/"/g, '&quot;')}">
+        </div>
+        <div class="product-info">
+          <div class="product-title">${product.name || ''}</div>
+          <div class="product-sku">${product.sku || ''}</div>
+          <div class="product-price">${price}</div>
+          <button class="add-to-cart" data-product-id="${product.id}">Add to cart</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = html;
+
+  // After rendering, verify images and fall back if needed
+  // (background-image doesn't emit onerror, so we preload each src and swap if it fails)
+  setTimeout(() => {
+    (products || []).forEach(product => {
+      const urlToTry = product.previewImageUrl || product.baseImageUrl;
+      if (!urlToTry) return;
+
+      const testImg = new Image();
+      testImg.onload = () => {
+        // Optional: mark loaded state
+        const card = container.querySelector(`[data-product-id="${product.id}"] .product-image`);
+        if (card) card.classList.add('loaded');
+      };
+      testImg.onerror = () => {
+        // Switch card background to base image on error
+        const card = container.querySelector(`[data-product-id="${product.id}"] .product-image`);
+        if (card && product.baseImageUrl) {
+          card.style.backgroundImage = `url('${product.baseImageUrl}')`;
+        }
+      };
+      testImg.src = urlToTry;
+    });
+  }, 0);
+
+  // (Optional) wire up add-to-cart buttons if your page expects it
+  container.querySelectorAll('.add-to-cart').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-product-id');
+      // TODO: integrate with your existing add-to-cart logic
+      console.log('Add to cart:', id);
+    });
+  });
+}
 
     // Quantity controls
     function adjustQuantity(productId, delta) {

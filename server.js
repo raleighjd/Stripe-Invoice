@@ -1,7 +1,9 @@
 // server.js
 require('dotenv').config();
 console.log('STRIPE_SECRET_KEY:', process.env.STRIPE_SECRET_KEY);
+
 const express = require('express');
+const axios = require('axios');
 const app = express();
 
 // Initialize Stripe only if we have a valid API key
@@ -22,8 +24,91 @@ const CONFIG = {
     .map(s => s.trim().toUpperCase())
 };
 
+// ---- Airtable loader with PAT (cached) ----
+const AIRTABLE = {
+  token: process.env.AIRTABLE_PAT,             // ← Personal Access Token (pat_…)
+  baseId: process.env.AIRTABLE_BASE_ID,        // e.g. appXXXXXXXXXXXXXX
+  table: process.env.AIRTABLE_TABLE_NAME || 'Products',
+};
+
+// In-memory cache (5 minutes TTL)
+let _airtableCache = { products: null, expiresAt: 0 };
+
+function safeJsonParse(str, fallback) {
+  if (!str || typeof str !== 'string') return fallback;
+  try { return JSON.parse(str); } catch { return fallback; }
+}
+
+function mapAirtableRecordToProduct(rec) {
+  const f = rec.fields || {};
+  const pricing = safeJsonParse(f.pricing_json, []);
+  const boxesObj = safeJsonParse(f.boxes, { boxes: [] });
+  return {
+    id: f.product_id || f.id || rec.id,
+    name: f.name || '',
+    sku: f.sku || '',
+    description: f.description || '',
+    imageFile: f.image_file || '',
+    pricing: Array.isArray(pricing) ? pricing : [],
+    boxes: Array.isArray(boxesObj?.boxes) ? boxesObj.boxes : [],
+  };
+}
+
+async function fetchAirtablePage(offset) {
+  if (!AIRTABLE.token || !AIRTABLE.baseId) {
+    throw new Error('Missing AIRTABLE_PAT or AIRTABLE_BASE_ID');
+  }
+  const url = `https://api.airtable.com/v0/${AIRTABLE.baseId}/${encodeURIComponent(AIRTABLE.table)}`;
+  const params = { pageSize: 100, ...(offset ? { offset } : {}) };
+  const { data } = await axios.get(url, {
+    params,
+    headers: { Authorization: `Bearer ${AIRTABLE.token}` },
+    timeout: 15000,
+  });
+  return data;
+}
+
+async function fetchProductsFromAirtableRaw() {
+  let records = [];
+  let offset;
+  do {
+    const page = await fetchAirtablePage(offset);
+    records = records.concat(page.records || []);
+    offset = page.offset;
+  } while (offset);
+
+  const rows = records
+    .map(mapAirtableRecordToProduct)
+    .filter(r => r.id && r.imageFile && Array.isArray(r.pricing));
+
+  if (!rows.length) throw new Error('No valid products from Airtable');
+  return rows;
+}
+
+async function fetchProductsFromAirtableCached() {
+  const now = Date.now();
+  if (_airtableCache.products && _airtableCache.expiresAt > now) {
+    return _airtableCache.products;
+  }
+  const fresh = await fetchProductsFromAirtableRaw();
+  _airtableCache = { products: fresh, expiresAt: now + 5 * 60 * 1000 };
+  return fresh;
+}
+
+// Admin-only: force cache reload
+app.post('/api/admin/reload-products', async (req, res) => {
+  try {
+    const fresh = await fetchProductsFromAirtableRaw();
+    _airtableCache = { products: fresh, expiresAt: Date.now() + 5 * 60 * 1000 };
+    res.json({ ok: true, count: fresh.length });
+  } catch (e) {
+    const hint = /403/.test(String(e)) ? ' (check PAT scopes & base access)' : '';
+    res.status(500).json({ error: e.message + hint });
+  }
+});
+
 /* ---------------------------------
-   Product Catalog (20 items)
+   Product Catalog (local fallback)
    --------------------------------- */
 const PRODUCTS = [
   {
@@ -318,8 +403,7 @@ function emailToS3Folder(email) {
 function getProductImageUrl(product, customerEmail) {
   const emailFolder = emailToS3Folder(customerEmail || 'default@example.com');
   const encodedFile = encodeURIComponent(product.imageFile);
-  // Remove any double slashes and ensure proper URL construction
-  const baseUrl = CONFIG.AWS_BUCKET_URL.replace(/\/$/, ''); // Remove trailing slash
+  const baseUrl = CONFIG.AWS_BUCKET_URL.replace(/\/$/, '');
   return `${baseUrl}/${emailFolder}/mockups/${encodedFile}`;
 }
 
@@ -330,12 +414,14 @@ function calculatePrice(product, quantity) {
   );
   return tier ? tier.price : product.pricing[0].price;
 }
+
 function getPricingTable(product) {
   return product.pricing.map((t) => ({
     quantity_range: t.maxQty ? `${t.minQty}-${t.maxQty}` : `${t.minQty}+`,
-    price_per_unit: `$${t.price.toFixed(2)}`
+    price_per_unit: `$${Number(t.price).toFixed(2)}`
   }));
 }
+
 function normalizeAddress(addr = {}) {
   return {
     line1: addr.line1 || '',
@@ -346,36 +432,15 @@ function normalizeAddress(addr = {}) {
     country: (addr.country || 'US').toUpperCase()
   };
 }
-async function getOrCreateCustomer(customerInfo, billingAddress, shippingAddress) {
-  const email = customerInfo.email;
-  const list = await stripe.customers.list({ email, limit: 1 });
-  const base = {
-    email,
-    name: customerInfo.name || undefined,
-    phone: customerInfo.phone || undefined,
-    address: normalizeAddress(billingAddress),
-    shipping: {
-      name: customerInfo.name || undefined,
-      address: normalizeAddress(shippingAddress)
-    }
-  };
-  if (list.data.length) {
-    const id = list.data[0].id;
-    await stripe.customers.update(id, base);
-    return id;
-  } else {
-    const created = await stripe.customers.create(base);
-    return created.id;
+
+/** Resolve active product list (Airtable preferred, fallback local) */
+async function getActiveProducts() {
+  try {
+    return await fetchProductsFromAirtableCached();
+  } catch (err) {
+    console.warn('⚠️ Airtable fetch failed, using local PRODUCTS:', err.message);
+    return PRODUCTS;
   }
-}
-function computeSubtotalCents(cart) {
-  return cart.reduce((sum, item) => {
-    const p = PRODUCTS.find(x => x.id === item.productId);
-    if (!p) return sum;
-    const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
-    const unit = calculatePrice(p, qty);
-    return sum + Math.round(unit * 100) * qty;
-  }, 0);
 }
 
 /** Build shipping options per session (taxed) */
@@ -435,28 +500,58 @@ function shippingOptionsFor(subtotalCents, shippingAddress) {
 app.use(express.json());
 app.use(express.static('public'));
 
-/* Products (with optional branded preview) */
-app.get('/api/products', (req, res) => {
+/* Products (Airtable preferred; returns array for your UI) */
+app.get('/api/products', async (req, res) => {
   const { customerEmail } = req.query || {};
-  const list = PRODUCTS.map((p) => ({
-    ...p,
-    currentPrice: p.pricing[0].price,
-    pricingTable: getPricingTable(p),
-    previewImageUrl: customerEmail ? getProductImageUrl(p, customerEmail) : null
-  }));
-  res.json(list);
+  let products;
+  let fromAirtable = true;
+
+  try {
+    products = await fetchProductsFromAirtableCached();
+  } catch (err) {
+    fromAirtable = false;
+    products = PRODUCTS;
+  }
+
+  const enriched = products.map(p => {
+    const baseImageUrl = `${CONFIG.PUBLIC_BASE_URL}/images/products/${encodeURIComponent(p.imageFile)}`;
+    const previewImageUrl = customerEmail
+      ? `${CONFIG.AWS_BUCKET_URL}/${emailToS3Folder(customerEmail)}/mockups/${encodeURIComponent(p.imageFile)}`
+      : null;
+
+    const pricing = p.pricing || [];
+    const pricingTable = pricing.map(t => ({
+      quantity_range: t.maxQty ? `${t.minQty}-${t.maxQty}` : `${t.minQty}+`,
+      price_per_unit: `$${Number(t.price || 0).toFixed(2)}`
+    }));
+
+    return {
+      ...p,
+      baseImageUrl,
+      previewImageUrl,
+      pricingTable,
+      currentPrice: Number(pricing?.[0]?.price || 0)
+    };
+  });
+
+  // Return a plain array to match your front-end expectations
+  res.json(enriched);
 });
 
-/* Price calculation per quantity */
-app.post('/api/calculate-price', (req, res) => {
+/* Price calculation per quantity (uses Airtable data first) */
+app.post('/api/calculate-price', async (req, res) => {
   const { productId, quantity } = req.body || {};
-  const product = PRODUCTS.find((p) => p.id === productId);
+  if (!productId) return res.status(400).json({ error: 'productId required' });
+
+  const list = await getActiveProducts();
+  const product = list.find(p => p.id === productId);
   if (!product) return res.status(404).json({ error: 'Product not found' });
 
   const qty = Math.max(1, parseInt(quantity, 10) || 1);
   const unitPrice = calculatePrice(product, qty);
   const totalPrice = unitPrice * qty;
-  const savings = qty > 1 ? (product.pricing[0].price - unitPrice) * qty : 0;
+  const basePrice = product.pricing?.[0]?.price || unitPrice;
+  const savings = qty > 1 ? (basePrice - unitPrice) * qty : 0;
 
   res.json({
     productId,
@@ -480,38 +575,23 @@ app.post('/api/calculate-tax', async (req, res) => {
       return res.json({ taxAmount: 0 });
     }
 
-    // Create line items for Stripe Tax calculation
-    const line_items = items.map((item) => {
-      const product = PRODUCTS.find(p => p.id === item.productId);
-      if (!product) throw new Error(`Unknown product ${item.productId}`);
-      
-      return {
-        amount: Math.round(item.unitPrice * 100), // Convert to cents
-        quantity: item.quantity,
-        reference: item.productId
-      };
-    });
+    const line_items = items.map((item) => ({
+      amount: Math.round(Number(item.unitPrice || 0) * 100), // client-sent unitPrice
+      quantity: item.quantity,
+      reference: item.productId
+    }));
 
-    // Use Stripe Tax API to calculate tax
     const calculation = await stripe.tax.calculations.create({
       currency: 'usd',
       line_items,
       customer_details: {
-        address: {
-          postal_code: zip,
-          country: 'US'
-        },
+        address: { postal_code: zip, country: 'US' },
         address_source: 'shipping'
       }
     });
 
-    const taxAmount = calculation.tax_amount_exclusive / 100; // Convert back to dollars
-
-    res.json({ 
-      taxAmount: Number(taxAmount.toFixed(2)),
-      taxBreakdown: calculation.tax_breakdown 
-    });
-
+    const taxAmount = calculation.tax_amount_exclusive / 100;
+    res.json({ taxAmount: Number(taxAmount.toFixed(2)), taxBreakdown: calculation.tax_breakdown });
   } catch (err) {
     console.error('Tax calculation error:', err);
     res.status(500).json({ error: 'Failed to calculate tax', taxAmount: 0 });
@@ -525,16 +605,16 @@ app.post('/api/create-checkout', async (req, res) => {
       return res.status(500).json({ error: 'Missing STRIPE_SECRET_KEY in .env' });
     }
 
-    const { customerInfo, products: cart, shippingAddress, billingAddress } = req.body || {};
+    const { customerInfo, products: cart } = req.body || {};
     if (!Array.isArray(cart) || !cart.length) {
       return res.status(400).json({ error: 'Cart is empty' });
     }
-    
-    // Let Stripe handle all customer data collection - no pre-creation needed
+
     const safeCustomerInfo = customerInfo || { name: '', email: '', company: '', phone: '' };
+    const activeProducts = await getActiveProducts();
 
     const line_items = cart.map((item) => {
-      const p = PRODUCTS.find((x) => x.id === item.productId);
+      const p = activeProducts.find((x) => x.id === item.productId);
       if (!p) throw new Error(`Unknown product ${item.productId}`);
       const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
       const unit = calculatePrice(p, qty);
@@ -545,42 +625,37 @@ app.post('/api/create-checkout', async (req, res) => {
           currency: 'usd',
           unit_amount: Math.round(unit * 100),
           tax_behavior: 'exclusive',
-          product_data: {
-            name: p.name,
-            description: p.description,
-            images: [img]
-          }
+          product_data: { name: p.name, description: p.description, images: [img] }
         },
         quantity: qty
       };
     });
 
-    const subtotalCents = computeSubtotalCents(cart);
-    // Use default US shipping since Stripe will collect real address
+    const subtotalCents = cart.reduce((sum, item) => {
+      const p = activeProducts.find(ap => ap.id === item.productId);
+      if (!p) return sum;
+      const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
+      const unit = calculatePrice(p, qty);
+      return sum + Math.round(unit * 100) * qty;
+    }, 0);
+
     const shipping_options = shippingOptionsFor(subtotalCents, { country: 'US' });
 
     const sessionConfig = {
       mode: 'payment',
-      
-      // Let Stripe collect all customer information
       billing_address_collection: 'required',
       shipping_address_collection: { allowed_countries: CONFIG.ALLOWED_SHIP_COUNTRIES },
       phone_number_collection: { enabled: true },
-
-      // Pre-fill email if provided
       customer_email: safeCustomerInfo.email || undefined,
-
       shipping_options,
       automatic_tax: { enabled: true },
       line_items,
       allow_promotion_codes: true,
-
       success_url: `${CONFIG.PUBLIC_BASE_URL}/?success=1&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${CONFIG.PUBLIC_BASE_URL}/?canceled=1`
     };
 
     const session = await stripe.checkout.sessions.create(sessionConfig);
-
     res.json({ url: session.url });
   } catch (err) {
     console.error('Stripe create-checkout error:', err);
