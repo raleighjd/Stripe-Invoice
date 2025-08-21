@@ -73,9 +73,7 @@ def main():
 
     if not AIRTABLE_BASE_ID or not AIRTABLE_PAT:
         raise SystemExit("Missing AIRTABLE_BASE_ID or AIRTABLE_PAT")
-    if not AWS_BUCKET_NAME:
-        # We still generate files locally even if bucket missing, but upload will be skipped.
-        pass
+    # If BUCKET is missing, we still generate locally; upload will be skipped.
 
     # Fetch rows
     if USE_AIRTABLE_SDK:
@@ -88,7 +86,6 @@ def main():
 
     # Build mockup_config: image_file -> { boxes: [...] }
     mockup_config = {}
-    image_file_of_pid = None
     for rec in records:
         fields = rec["fields"] if not USE_AIRTABLE_SDK else rec.get("fields", rec)
         pid = fields.get("product_id") or fields.get("id")
@@ -102,7 +99,6 @@ def main():
             boxes = []
         if image_file and boxes:
             mockup_config[image_file] = {"boxes": boxes}
-            image_file_of_pid = image_file
 
     if not mockup_config:
         raise SystemExit("No products with bounding boxes matched selection in Airtable.")
@@ -110,9 +106,9 @@ def main():
     # Temp work dirs
     work = tempfile.mkdtemp(prefix="mockups_")
     logos_dir = os.path.join(work, "logos")
-    out_dir   = os.path.join(work, "out")       // PNGs
-    pdf_dir   = os.path.join(work, "pdf")       // PDFs
-    prev_dir  = os.path.join(work, "preview")   // previews
+    out_dir   = os.path.join(work, "out")       # PNGs
+    pdf_dir   = os.path.join(work, "pdf")       # PDFs
+    prev_dir  = os.path.join(work, "preview")   # previews
     ensure_dir(out_dir); ensure_dir(pdf_dir); ensure_dir(prev_dir)
 
     # Download logo
@@ -142,24 +138,18 @@ def main():
         uploaded_pdf  = upload_folder_to_s3(pdf_dir,  s3_prefix)
         uploaded_prev = upload_folder_to_s3(prev_dir, s3_prefix)
 
-    # Emit a pure JSON manifest on stdout (server.js relies on this)
+    # Emit pure JSON manifest on stdout (server.js reads this)
     manifest = {
         "email": args.email,
         "product_id": target_pid or None,
         "s3_prefix": s3_prefix,
         "product_map": {}
     }
-
-    # Build map for each image_file in mockup_config
     for image_file in mockup_config.keys():
-        # try to pick URLs that match the image filename (if possible)
-        def pick(urls):
-            # no strong filter here; just return them
-            return urls
         manifest["product_map"][image_file] = {
-            "png_urls": pick(uploaded_png),
-            "pdf_urls": pick(uploaded_pdf),
-            "preview_urls": pick(uploaded_prev)
+            "png_urls": uploaded_png,
+            "pdf_urls": uploaded_pdf,
+            "preview_urls": uploaded_prev
         }
 
     print(json.dumps(manifest), flush=True)
