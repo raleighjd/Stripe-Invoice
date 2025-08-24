@@ -10,6 +10,19 @@ const { spawn } = require('child_process');
 const { uploadFileToS3 } = require('./s3'); // Node S3 uploader (used for base placeholder upload)
 const app = express();
 
+// Configuration object - must be defined before S3Client
+const CONFIG = {
+  AWS_BUCKET_URL: process.env.AWS_BUCKET_URL || 'https://leadprocessor.s3.us-east-2.amazonaws.com',
+  AWS_REGION: process.env.AWS_REGION || 'us-east-2',
+  AWS_BUCKET_NAME: process.env.AWS_BUCKET_NAME || 'leadprocessor',
+  PORT: process.env.PORT || 3000,
+  PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || 'http://localhost:3000',
+  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || '',
+  ALLOWED_SHIP_COUNTRIES: (process.env.ALLOWED_SHIP_COUNTRIES || 'US,CA')
+    .split(',')
+    .map(s => s.trim().toUpperCase())
+};
+
 // Import AWS SDK for S3 operations
 const { S3Client, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 const s3Client = new S3Client({
@@ -29,18 +42,6 @@ if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY.trim() !== ''
 } else {
   console.warn('⚠️  STRIPE_SECRET_KEY not found or empty. Stripe features will be disabled.');
 }
-
-const CONFIG = {
-  AWS_BUCKET_URL: process.env.AWS_BUCKET_URL || 'https://leadprocessor.s3.us-east-2.amazonaws.com',
-  AWS_REGION: process.env.AWS_REGION || 'us-east-2',
-  AWS_BUCKET_NAME: process.env.AWS_BUCKET_NAME || 'leadprocessor',
-  PORT: process.env.PORT || 3000,
-  PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || 'http://localhost:3000',
-  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || '',
-  ALLOWED_SHIP_COUNTRIES: (process.env.ALLOWED_SHIP_COUNTRIES || 'US,CA')
-    .split(',')
-    .map(s => s.trim().toUpperCase())
-};
 
 // ---- Airtable loader with PAT (cached) ----
 const AIRTABLE = {
