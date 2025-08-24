@@ -1126,21 +1126,60 @@
     async function generateMockup(productId) {
       console.log('Generating mockup for product:', productId);
       
-      // Get customer email (required for S3 folder structure)
       let email = document.getElementById('customerEmail').value.trim();
+      let logoUrl = null;
+
+      // If email is provided, try to fetch their logo from S3
       if (!email) {
-        email = prompt('Customer email for S3 folder (required):');
+        showMessage('Please enter a customer email first, or we\'ll ask you to upload a logo file.', 'error');
+        // For now, let's still ask for manual logo URL if no email
+        logoUrl = prompt('No email provided. Please enter logo URL:');
         if (!email) {
-          showMessage('Email is required for mockup generation', 'error');
+          showMessage('Logo URL is required for mockup generation', 'error');
           return;
         }
-        document.getElementById('customerEmail').value = email;
+      } else {
+        // Try to fetch logo from S3 for this customer
+        try {
+          showMessage('Looking for existing logo in S3...', 'success');
+          const logoResponse = await fetch(`/api/customer/${encodeURIComponent(email)}/logo`);
+          const logoData = await logoResponse.json();
+          
+          if (logoData.hasLogo) {
+            logoUrl = logoData.logoUrl;
+            showMessage(`Found logo: ${logoData.filename}`, 'success');
+          } else {
+            // No logo found, ask for upload or URL
+            const userChoice = confirm(
+              'No logo found in S3 for this customer email.\n\n' +
+              'Click OK to provide a logo URL, or Cancel to upload a file later.'
+            );
+            
+            if (userChoice) {
+              logoUrl = prompt('Please enter logo URL:');
+              if (!logoUrl) {
+                showMessage('Logo URL is required for mockup generation', 'error');
+                return;
+              }
+            } else {
+              showMessage('Please upload a logo file to S3 first, then try again.', 'error');
+              return;
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching logo:', error);
+          showMessage('Could not check for existing logo. Please provide logo URL.', 'error');
+          logoUrl = prompt('Please enter logo URL:');
+          if (!logoUrl) {
+            showMessage('Logo URL is required for mockup generation', 'error');
+            return;
+          }
+        }
       }
       
-      // Get logo URL
-      const logoUrl = prompt('Logo URL (PNG recommended):', '');
-      if (!logoUrl) {
-        showMessage('Logo URL is required for mockup generation', 'error');
+      // Ensure we have both email and logoUrl at this point
+      if (!email || !logoUrl) {
+        showMessage('Both email and logo are required for mockup generation', 'error');
         return;
       }
       

@@ -10,6 +10,18 @@ const { spawn } = require('child_process');
 const { uploadFileToS3 } = require('./s3'); // Node S3 uploader (used for base placeholder upload)
 const app = express();
 
+// Import AWS SDK for S3 operations
+const { S3Client, ListObjectsV2Command } = require('@aws-sdk/client-s3');
+const s3Client = new S3Client({
+  region: CONFIG.AWS_REGION,
+  credentials: process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
+    ? {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      }
+    : undefined,
+});
+
 // Initialize Stripe only if we have a valid API key
 let stripe = null;
 if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY.trim() !== '') {
@@ -405,6 +417,53 @@ app.post('/api/products/:id/boxes', async (req, res) => {
   } catch (e) {
     console.error('boxes save error:', e.message);
     res.status(500).json({ error: e.message });
+  }
+});
+
+/* Find logo in S3 for customer email */
+app.get('/api/customer/:email/logo', async (req, res) => {
+  try {
+    const email = req.params.email;
+    if (!email) return res.status(400).json({ error: 'Email required' });
+
+    const emailFolder = emailToS3Folder(email);
+    const logoPrefix = `${emailFolder}/logo/`;
+
+    // List objects in the logo folder
+    const command = new ListObjectsV2Command({
+      Bucket: CONFIG.AWS_BUCKET_NAME,
+      Prefix: logoPrefix,
+      MaxKeys: 10
+    });
+
+    const response = await s3Client.send(command);
+    const logoFiles = (response.Contents || [])
+      .filter(obj => obj.Key && !obj.Key.endsWith('/')) // Exclude folder markers
+      .filter(obj => {
+        const filename = obj.Key.toLowerCase();
+        return filename.endsWith('.png') || filename.endsWith('.jpg') || 
+               filename.endsWith('.jpeg') || filename.endsWith('.svg');
+      })
+      .sort((a, b) => new Date(b.LastModified) - new Date(a.LastModified)); // Most recent first
+
+    if (logoFiles.length === 0) {
+      return res.status(404).json({ error: 'No logo found', hasLogo: false });
+    }
+
+    // Return the most recent logo file
+    const logoFile = logoFiles[0];
+    const logoUrl = `${CONFIG.AWS_BUCKET_URL}/${logoFile.Key}`;
+
+    res.json({
+      hasLogo: true,
+      logoUrl: logoUrl,
+      filename: logoFile.Key.split('/').pop(),
+      uploadedAt: logoFile.LastModified
+    });
+
+  } catch (error) {
+    console.error('Error fetching customer logo:', error);
+    res.status(500).json({ error: 'Failed to fetch logo', hasLogo: false });
   }
 });
 
