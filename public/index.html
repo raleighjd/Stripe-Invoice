@@ -705,6 +705,30 @@
       }).join('');
       
       container.innerHTML = html;
+      
+      // Handle image fallback for failed preview images
+      setTimeout(() => {
+        products.forEach(product => {
+          if (product.previewImageUrl && product.baseImageUrl) {
+            const productCard = container.querySelector(`[data-product-id="${product.id}"]`);
+            const imageDiv = productCard?.querySelector('.product-image');
+            if (imageDiv) {
+              // Test if preview image loads
+              const testImg = new Image();
+              testImg.onload = () => {
+                // Preview image loaded successfully, keep it
+                console.log('✅ Preview image loaded for', product.name);
+              };
+              testImg.onerror = () => {
+                // Preview image failed, fallback to base image
+                console.log('⚠️ Preview image failed, falling back to base image for', product.name);
+                imageDiv.style.backgroundImage = `url('${product.baseImageUrl}')`;
+              };
+              testImg.src = product.previewImageUrl;
+            }
+          }
+        });
+      }, 100);
     }
 
     // Load branded mockups
