@@ -685,7 +685,7 @@
               
               <div class="quantity-controls">
                 <button class="qty-btn" onclick="adjustQuantity(${JSON.stringify(product.id)}, -1)">−</button>
-                <input id="qty-${product.id}" class="qty-input" type="number" value="0" min="0" onchange="updateProductPricing(${JSON.stringify(product.id)})">
+               <input id="qty-${product.id}" class="qty-input" type="number" value="0" min="0" onchange="updateProductPricing(${JSON.stringify(product.id)})" oninput="updateProductPricing(${JSON.stringify(product.id)})">
                 <button class="qty-btn" onclick="adjustQuantity(${JSON.stringify(product.id)}, 1)">+</button>
               </div>
               
@@ -868,7 +868,6 @@
       const newValue = Math.max(0, parseInt(input.value || '0') + delta);
       input.value = newValue;
       updateProductPricing(productId);
-      updateQuote();
     }
 
     // Calculate unit price locally
@@ -913,15 +912,20 @@
 
       // Highlight active tier
       const card = document.getElementById(`qty-${productId}`).closest('.product-card');
-      card.querySelectorAll('.pricing-tier').forEach(tierEl => {
-        const range = tierEl.dataset.range;
-        const tier = product.pricing.find(p => {
-          const tierRange = p.maxQty ? `${p.minQty}-${p.maxQty}` : `${p.minQty}+`;
-          return range === tierRange;
+      if (card) {
+        card.querySelectorAll('.pricing-tier').forEach(tierEl => {
+          const range = tierEl.dataset.range;
+          const tier = product.pricing.find(p => {
+            const tierRange = p.maxQty ? `${p.minQty}-${p.maxQty}` : `${p.minQty}+`;
+            return range === tierRange;
+          });
+          const isActive = tier && quantity >= tier.minQty && (tier.maxQty === null || quantity <= tier.maxQty);
+          tierEl.classList.toggle('active', isActive);
         });
-        const isActive = tier && quantity >= tier.minQty && (tier.maxQty === null || quantity <= tier.maxQty);
-        tierEl.classList.toggle('active', isActive);
-      });
+      }
+      
+      // Update quote totals
+      updateQuote();
     }
 
     // Update quote
