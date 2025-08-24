@@ -684,9 +684,9 @@
               ` : ''}
               
               <div class="quantity-controls">
-                <button class="qty-btn" onclick="adjustQuantity(${JSON.stringify(product.id)}, -1)">−</button>
-               <input id="qty-${product.id}" class="qty-input" type="number" value="0" min="0" onchange="updateProductPricing(${JSON.stringify(product.id)})" oninput="updateProductPricing(${JSON.stringify(product.id)})">
-                <button class="qty-btn" onclick="adjustQuantity(${JSON.stringify(product.id)}, 1)">+</button>
+                <button class="qty-btn" onclick="adjustQuantity('${product.id}', -1)">−</button>
+               <input id="qty-${product.id}" class="qty-input" type="number" value="0" min="0" onchange="updateProductPricing('${product.id}')" oninput="updateProductPricing('${product.id}')">
+                <button class="qty-btn" onclick="adjustQuantity('${product.id}', 1)">+</button>
               </div>
               
               <div id="price-${product.id}" class="product-price">Starting at $${basePrice.toFixed(2)}</div>
