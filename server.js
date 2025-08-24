@@ -456,7 +456,7 @@ app.post('/api/products/:id/mockup', async (req, res) => {
     ];
     let pyStdout = '';
     let pyStderr = '';
-    const py = spawn('python', args);
+    const py = spawn('python3', args);
     py.stdout.on('data', (d) => { pyStdout += d.toString(); });
     py.stderr.on('data', (d) => { pyStderr += d.toString(); });
     py.on('close', async (code) => {
