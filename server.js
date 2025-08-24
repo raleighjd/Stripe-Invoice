@@ -69,7 +69,6 @@ async function fetchAirtablePage(offset) {
   const { data } = await axios.get(url, {
     params,
     headers: { Authorization: `Bearer ${AIRTABLE.token}` },
-    timeout: 15000,
   });
   return data;
 }
@@ -107,7 +106,6 @@ async function airtableFindRecordIdByProductId(productId) {
   const { data } = await axios.get(url, {
     params,
     headers: { Authorization: `Bearer ${AIRTABLE.token}` },
-    timeout: 15000
   });
   const rec = (data.records || [])[0];
   return rec?.id || null;
@@ -120,8 +118,7 @@ async function airtableUpdateFields(recordId, fields) {
     headers: {
       Authorization: `Bearer ${AIRTABLE.token}`,
       'Content-Type': 'application/json'
-    },
-    timeout: 15000
+    }
   });
   return data;
 }
