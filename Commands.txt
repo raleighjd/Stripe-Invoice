@@ -1,0 +1,6 @@
+
+BLuepribt on how to make a quote
+http://localhost:3000/index.html?quoteId=Q123&customerEmail=you@company.com
+
+Opens all products without a postitioning box yet
+http://localhost:3000/index.html?bboxToken=directum-bbox-setup

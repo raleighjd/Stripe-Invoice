@@ -735,6 +735,7 @@
                 <select class="design-select" data-id="${product.id}" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;">
                   <option value="">Default</option>
                 </select>
+                <span class="version-chip" data-id="${product.id}" style="margin-left:6px;font-size:11px;color:#742A2A;background:#FED7D7;border:1px solid #FEB2B2;padding:2px 8px;border-radius:999px;">Default</span>
               </div>
               
               ${pricingTiersHtml ? `
@@ -766,6 +767,22 @@
       
       container.innerHTML = html;
       
+      // Helpers for version chips + persistence
+      function loadSavedVersions(){
+        try { return JSON.parse(localStorage.getItem('versionSelections') || '{}'); } catch { return {}; }
+      }
+      function saveSelectedVersion(productId, version){
+        const map = loadSavedVersions();
+        if (version) map[productId] = version; else delete map[productId];
+        localStorage.setItem('versionSelections', JSON.stringify(map));
+      }
+      function setVersionChip(productId, version){
+        const chip = container.querySelector(`.version-chip[data-id="${productId}"]`);
+        if (!chip) return;
+        if (version) { chip.textContent = version; chip.style.display = 'inline-block'; }
+        else { chip.textContent = 'Default'; chip.style.display = 'inline-block'; }
+      }
+
       // Helper: cache and fetch legacy preview URLs (email-only, no version)
       async function getLegacyPreviewUrl(email, productId) {
         if (!email) return '';
@@ -780,6 +797,59 @@
         } catch (_) { return ''; }
       }
       
+      // Rebuild a product's versions dropdown and select a version (no duplicates)
+      window.repopulateVersionDropdown = async function(product, email, selectedVersion) {
+        if (!window.__quoteId) return;
+        const sel = container.querySelector(`.design-select[data-id="${product.id}"]`);
+        const card = container.querySelector(`.product-card[data-product-id="${product.id}"]`);
+        const imageDiv = card?.querySelector('.product-image');
+        if (!sel) return;
+        try {
+          const data = await fetch(`/api/quotes/${encodeURIComponent(window.__quoteId)}/products/${encodeURIComponent(product.id)}/versions?email=${encodeURIComponent(email)}`).then(r => r.json());
+          const versionsRaw = Array.isArray(data?.versions) ? data.versions : [];
+          const versions = Array.from(new Set(versionsRaw));
+          const newSel = sel.cloneNode(true);
+          newSel.innerHTML = '<option value="">Default</option>' + versions.map(v => `<option value="${v}">${v}</option>`).join('');
+          sel.parentNode.replaceChild(newSel, sel);
+          const targetVersion = selectedVersion && versions.includes(selectedVersion) ? selectedVersion : '';
+          newSel.value = targetVersion;
+          setVersionChip(product.id, targetVersion);
+          // Load corresponding image
+          if (targetVersion) {
+            try {
+              const j = await fetch(`/api/quotes/${encodeURIComponent(window.__quoteId)}/versions/${encodeURIComponent(targetVersion)}/previews/${encodeURIComponent(product.id)}?email=${encodeURIComponent(email)}`).then(r => r.json());
+              if (j?.url && imageDiv) imageDiv.style.backgroundImage = `url('${j.url}')`;
+            } catch (_) {}
+          } else {
+            try {
+              const list = await fetch(`/api/products?customerEmail=${encodeURIComponent(email)}`).then(r => r.json());
+              const p = Array.isArray(list) ? list.find(x => x.id === product.id) : null;
+              if (p?.previewImageUrl) imageDiv.style.backgroundImage = `url('${p.previewImageUrl}')`;
+              else if (p?.baseImageUrl) imageDiv.style.backgroundImage = `url('${p.baseImageUrl}')`;
+            } catch (_) {}
+          }
+          // Rebind change handler
+          newSel.addEventListener('change', async (e) => {
+            const version = e.target.value || '';
+            if (version) {
+              try {
+                const j = await fetch(`/api/quotes/${encodeURIComponent(window.__quoteId)}/versions/${encodeURIComponent(version)}/previews/${encodeURIComponent(product.id)}?email=${encodeURIComponent(email)}`).then(r => r.json());
+                if (j?.url && imageDiv) imageDiv.style.backgroundImage = `url('${j.url}')`;
+              } catch (err) { console.warn('version preview failed', err); }
+            } else {
+              try {
+                const list = await fetch(`/api/products?customerEmail=${encodeURIComponent(email)}`).then(r => r.json());
+                const p = Array.isArray(list) ? list.find(x => x.id === product.id) : null;
+                if (p?.previewImageUrl) imageDiv.style.backgroundImage = `url('${p.previewImageUrl}')`;
+                else if (p?.baseImageUrl) imageDiv.style.backgroundImage = `url('${p.baseImageUrl}')`;
+              } catch (err) {}
+            }
+            saveSelectedVersion(product.id, version);
+            setVersionChip(product.id, version);
+          });
+        } catch (err) { console.warn('repopulate versions failed', err); }
+      }
+
       // Handle image fallback with robust chain: preview -> legacy -> base -> blank
       setTimeout(() => {
         products.forEach(product => {
@@ -803,6 +873,30 @@
         });
       }, 100);
 
+      // Periodically refresh presigned version URLs for selected versions
+      function refreshVersionPreviews() {
+        const email2 = (document.getElementById('customerEmail')?.value || '').trim();
+        if (!email2 || !window.__quoteId) return;
+        products.forEach(async (product) => {
+          const sel = container.querySelector(`.design-select[data-id="${product.id}"]`);
+          if (!sel) return;
+          const version = sel.value || '';
+          if (!version) return;
+          try {
+            const j = await fetch(`/api/quotes/${encodeURIComponent(window.__quoteId)}/versions/${encodeURIComponent(version)}/previews/${encodeURIComponent(product.id)}?email=${encodeURIComponent(email2)}`, { cache: 'no-store' }).then(r => r.json());
+            if (j?.url) {
+              const card = container.querySelector(`.product-card[data-product-id="${product.id}"]`);
+              const imageDiv = card?.querySelector('.product-image');
+              if (imageDiv) imageDiv.style.backgroundImage = `url('${j.url}')`;
+            }
+          } catch (_) { /* ignore */ }
+        });
+      }
+      if (!window.__versionRefreshTimer) {
+        window.__versionRefreshTimer = setInterval(refreshVersionPreviews, 4 * 60 * 1000);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(refreshVersionPreviews, 500); });
+      }
+
       // If in version mode and a product lacks preview, seed it with legacy preview proactively
       (async () => {
         const email = (document.getElementById('customerEmail')?.value || '').trim();
@@ -820,6 +914,7 @@
 
       // Populate per-product version dropdowns
       const email = (document.getElementById('customerEmail')?.value || '').trim();
+      const savedVersions = loadSavedVersions();
       if (email) {
         products.forEach(async (product) => {
           try {
@@ -829,6 +924,21 @@
             const data = await fetch(`/api/quotes/${encodeURIComponent(window.__quoteId)}/products/${encodeURIComponent(product.id)}/versions?email=${encodeURIComponent(email)}`).then(r => r.json());
             const versions = Array.isArray(data?.versions) ? data.versions : [];
             sel.innerHTML = '<option value="">Default</option>' + versions.map(v => `<option value="${v}">${v}</option>`).join('');
+            // Apply saved selection if present
+            const saved = savedVersions[product.id] || '';
+            if (saved && versions.includes(saved)) {
+              sel.value = saved;
+              setVersionChip(product.id, saved);
+              try {
+                const j = await fetch(`/api/quotes/${encodeURIComponent(window.__quoteId)}/versions/${encodeURIComponent(saved)}/previews/${encodeURIComponent(product.id)}?email=${encodeURIComponent(email)}`).then(r => r.json());
+                const card = container.querySelector(`.product-card[data-product-id="${product.id}"]`);
+                const imageDiv = card?.querySelector('.product-image');
+                if (j?.url && imageDiv) imageDiv.style.backgroundImage = `url('${j.url}')`;
+              } catch (err) {}
+            } else {
+              setVersionChip(product.id, '');
+            }
+
             sel.addEventListener('change', async (e) => {
               const version = e.target.value || '';
               const card = container.querySelector(`.product-card[data-product-id="${product.id}"]`);
@@ -848,6 +958,8 @@
                   else if (p?.baseImageUrl) imageDiv.style.backgroundImage = `url('${p.baseImageUrl}')`;
                 } catch (err) {}
               }
+              saveSelectedVersion(product.id, version);
+              setVersionChip(product.id, version);
             });
           } catch (err) { console.warn('populate versions failed', err); }
         });
@@ -894,6 +1006,8 @@
               <input id="logoFile" type="file" accept="image/*" style="display:none;">
               <label for="logoFile" id="logoFileBtn" style="background:#fff;border:1px solid #e2e8f0;color:#1A202C;padding:8px 14px;border-radius:10px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;">⬆️ Upload Logo</label>
               <span id="logoFileName" style="font-size:12px;color:#4A5568;"></span>
+              <input id="bboxVersionName" type="text" placeholder="Version name (e.g., V1)" style="padding:6px 8px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;min-width:140px;">
+              <button id="bboxGrid" style="background:#fff;border:1px solid #e2e8f0;padding:8px 12px;border-radius:10px;cursor:pointer;">Grid: On</button>
               <button id="bboxApply" style="background:#38A169;color:#fff;border:none;padding:8px 14px;border-radius:10px;cursor:pointer;">Apply Changes</button>
               <button id="bboxSave"  style="background:#111;color:#fff;border:none;padding:8px 14px;border-radius:10px;cursor:pointer;">Save</button>
               <button id="bboxClear" style="background:#eee;border:none;padding:8px 12px;border-radius:10px;cursor:pointer;">Clear</button>
@@ -923,8 +1037,14 @@
         wrap.appendChild(overlayImg);
       }
       const title = document.getElementById('bboxTitle');
+      const versionInput = document.getElementById('bboxVersionName');
       
       title.textContent = `Set Logo Position — ${product.name}`;
+      if (versionInput) {
+        versionInput.value = (window.__versionId || 'V1');
+        setTimeout(() => { try { versionInput.focus(); versionInput.select(); } catch(_){} }, 60);
+        versionInput.addEventListener('input', () => { versionInput.style.borderColor = '#e2e8f0'; });
+      }
       // Always start from a blank product image with no overlay/logo
       imgEl.src = product.baseImageUrl;
       if (overlayImg) { overlayImg.style.display = 'none'; overlayImg.src = ''; }
@@ -1075,10 +1195,7 @@
             const card = document.querySelector(`.product-card[data-product-id="${product.id}"]`);
             const imageDiv = card?.querySelector('.product-image');
             const sel = card?.querySelector('.design-select');
-            if (sel && !Array.from(sel.options).some(o => o.value === versionName)) {
-              const opt = document.createElement('option'); opt.value = versionName; opt.textContent = versionName; sel.appendChild(opt);
-            }
-            if (sel) sel.value = versionName;
+            if (sel) { await window.repopulateVersionDropdown(product, email, versionName); }
             if (imageDiv && rj.previewUrl) imageDiv.style.backgroundImage = `url('${rj.previewUrl}')`;
             showMessage('✅ Design saved (dropdown updated)', 'success');
           } catch (e) { console.error(e); showMessage('❌ Failed to save design: ' + e.message, 'error'); }
@@ -1086,8 +1203,13 @@
       }
 
       async function saveBox() {
-        const versionName = prompt('Name this design version (e.g., V1):', (window.__versionId || 'V1')) || '';
-        if (!versionName) { showMessage('Version name required', 'error'); return; }
+        const input = document.getElementById('bboxVersionName');
+        const versionName = (input && input.value || '').trim();
+        if (!versionName) {
+          showMessage('Version name required', 'error');
+          if (input) { input.style.borderColor = '#E53E3E'; try { input.focus(); } catch(_){} }
+          return;
+        }
         await applyChanges(versionName);
         close();
       }
@@ -1107,6 +1229,17 @@
       document.getElementById('bboxClear').onclick = clearBox;
       document.getElementById('bboxSave').onclick  = () => { saveBox().catch(err => { console.error(err); showMessage('Error: ' + err.message, 'error'); }); };
       document.getElementById('bboxApply').onclick = () => { applyChanges().catch(err => { console.error(err); showMessage('Error: ' + err.message, 'error'); }); };
+      // Grid toggle
+      let __gridOn = true;
+      function setGrid(on){
+        __gridOn = !!on;
+        wrap.style.background = __gridOn ? 'repeating-conic-gradient(#f7fafc 0% 25%, transparent 0% 50%) 50% / 20px 20px' : 'none';
+        const gb = document.getElementById('bboxGrid');
+        if (gb) gb.textContent = __gridOn ? 'Grid: On' : 'Grid: Off';
+      }
+      setGrid(true);
+      const gridBtn = document.getElementById('bboxGrid');
+      if (gridBtn) gridBtn.onclick = () => setGrid(!__gridOn);
       // Show selected filename next to Upload button
       const fileInputUI = document.getElementById('logoFile');
       const fileNameUI = document.getElementById('logoFileName');

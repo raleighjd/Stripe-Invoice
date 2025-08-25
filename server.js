@@ -514,14 +514,28 @@ app.post('/api/create-checkout', async (req, res) => {
       if (!p) throw new Error(`Unknown product ${item.productId}`);
       const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
       const unit = calculatePrice(p, qty);
-      let img = getProductImageUrl(p, safeCustomerInfo.email || 'default@example.com');
-      if (quoteId && versionId && safeCustomerInfo.email) {
+      const emailForImages = safeCustomerInfo.email || '';
+      const baseImageUrl = `${CONFIG.PUBLIC_BASE_URL}/images/products/${encodeURIComponent(p.imageFile)}`;
+      let img = null;
+      // Prefer per-item selected version, else global versionId
+      const chosenVersion = (item && typeof item.versionId === 'string' && item.versionId) ? item.versionId : (versionId || '');
+      if (quoteId && chosenVersion && emailForImages) {
         try {
-          const domain = companyDomainFromEmail(safeCustomerInfo.email);
-          const key = s3KeyForPreview(domain, quoteId, versionId, p.id);
+          const domain = companyDomainFromEmail(emailForImages);
+          const key = s3KeyForPreview(domain, quoteId, chosenVersion, p.id);
           img = await presignGetObject(key, 300);
-        } catch (_) {}
+        } catch (_) { img = null; }
       }
+      // Fallback to legacy email-based preview
+      if (!img && emailForImages) {
+        try {
+          const emailFolder = emailToS3Folder(emailForImages);
+          const legacyKey = `${emailFolder}/mockups/${p.imageFile}`;
+          img = await presignGetObject(legacyKey, 300);
+        } catch (_) { img = null; }
+      }
+      // Final fallback to base product image
+      if (!img) img = baseImageUrl;
 
       const productData = { name: p.name || `Item ${p.id}` };
       if (p.description && String(p.description).trim() !== '') {
@@ -530,7 +544,6 @@ app.post('/api/create-checkout', async (req, res) => {
       if (img && String(img).trim() !== '') {
         productData.images = [img];
       }
-      const chosenVersion = (item && typeof item.versionId === 'string') ? item.versionId : '';
       if (chosenVersion) {
         productData.metadata = Object.assign({}, productData.metadata || {}, { design_version: chosenVersion, quote_id: quoteId || '' });
       }
@@ -728,7 +741,19 @@ app.post('/api/quotes/:quoteId/versions/:versionId/previews/:productId/render', 
     const p = products.find(x => x.id === productId);
     if (!p) return res.status(404).json({ error: 'Unknown product' });
     const basePath = path.join(__dirname, 'public', 'images', 'products', p.imageFile);
-    if (!fs.existsSync(basePath)) return res.status(404).json({ error: 'Base image missing on server' });
+    let baseImageInput = null; // Buffer or file path for sharp
+    if (fs.existsSync(basePath)) {
+      baseImageInput = basePath;
+    } else {
+      // Fallback: fetch base image via HTTP from PUBLIC_BASE_URL
+      try {
+        const httpUrl = `${CONFIG.PUBLIC_BASE_URL}/images/products/${encodeURIComponent(p.imageFile)}`;
+        const resp = await axios.get(httpUrl, { responseType: 'arraybuffer' });
+        baseImageInput = Buffer.from(resp.data);
+      } catch (_) {
+        return res.status(404).json({ error: 'Base image missing on server and HTTP fetch failed' });
+      }
+    }
 
     // Load logo (download to buffer)
     const logoHttpUrl = design.logoRef.startsWith('s3://')
@@ -742,7 +767,7 @@ app.post('/api/quotes/:quoteId/versions/:versionId/previews/:productId/render', 
     const { x1, y1, x2, y2 } = placement;
 
     // Composite with sharp
-    const baseImage = sharp(basePath);
+    const baseImage = sharp(baseImageInput);
     const metadata = await baseImage.metadata();
     const width = Math.max(1, Math.round(x2 - x1));
     const height = Math.max(1, Math.round(y2 - y1));
@@ -752,7 +777,7 @@ app.post('/api/quotes/:quoteId/versions/:versionId/previews/:productId/render', 
       .resize({ width, height, fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png() // keep transparency in intermediate buffer
       .toBuffer();
-    const compositeBuf = await sharp(basePath)
+    const compositeBuf = await sharp(baseImageInput)
       .composite([{ input: resizedLogo, left: Math.round(x1), top: Math.round(y1), blend: 'over' }])
       .webp({ quality: 90 })
       .toBuffer();
