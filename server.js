@@ -136,7 +136,7 @@ async function airtableUpdateFields(recordId, fields) {
   return data;
 }
 
-// Admin-only: force cache reload
+// Force cache reload (no auth; protect at deploy layer if needed)
 app.post('/api/admin/reload-products', async (req, res) => {
   try {
     const fresh = await fetchProductsFromAirtableRaw();
@@ -571,8 +571,12 @@ app.post('/api/products/:id/mockup', async (req, res) => {
 /* Health */
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
-/* Start */
-app.listen(CONFIG.PORT, () => {
-  console.log(`Server running on port ${CONFIG.PORT}`);
-  console.log(`Open ${CONFIG.PUBLIC_BASE_URL}`);
-});
+/* Start (only when run directly) */
+if (require.main === module) {
+  app.listen(CONFIG.PORT, () => {
+    console.log(`Server running on port ${CONFIG.PORT}`);
+    console.log(`Open ${CONFIG.PUBLIC_BASE_URL}`);
+  });
+}
+
+module.exports = { app, shippingOptionsFor };
