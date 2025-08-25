@@ -1,5 +1,6 @@
 // s3.js
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const fs = require('fs');
 
 const AWS_REGION = process.env.AWS_REGION || 'us-east-2';
 const AWS_BUCKET_NAME = process.env.AWS_BUCKET_NAME || '';
@@ -46,4 +47,10 @@ function urlForKey(key) {
   return `https://${AWS_BUCKET_NAME}.s3.${AWS_REGION}.amazonaws.com/${encodeURI(key)}`;
 }
 
-module.exports = { uploadBuffer, urlForKey, s3Ready };
+async function uploadFileToS3(filePath, key, contentType = 'application/octet-stream', returnUrl = false) {
+  const buffer = await fs.promises.readFile(filePath);
+  await uploadBuffer(key, buffer, contentType);
+  return returnUrl ? urlForKey(key) : key;
+}
+
+module.exports = { uploadBuffer, uploadFileToS3, urlForKey, s3Ready };

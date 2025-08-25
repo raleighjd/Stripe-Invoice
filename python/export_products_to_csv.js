@@ -1,5 +1,5 @@
-﻿// scripts/export_products_to_csv.js
-// Usage: node scripts/export_products_to_csv.js [outputPath]
+// export_products_to_csv.js
+// Usage: node python/export_products_to_csv.js [outputPath]
 // Default output: ./products_full.csv
 
 const fs = require('fs');
