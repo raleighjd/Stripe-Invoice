@@ -1,6 +1,5 @@
 // server.js
 require('dotenv').config();
-console.log('STRIPE_SECRET_KEY:', process.env.STRIPE_SECRET_KEY);
 
 const express = require('express');
 const axios = require('axios');
@@ -8,6 +7,9 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const { uploadFileToS3 } = require('./s3'); // Node S3 uploader (used for base placeholder upload)
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const sharp = require('sharp');
 const app = express();
 
 // Configuration object - must be defined before S3Client
@@ -21,10 +23,13 @@ const CONFIG = {
   ALLOWED_SHIP_COUNTRIES: (process.env.ALLOWED_SHIP_COUNTRIES || 'US,CA')
     .split(',')
     .map(s => s.trim().toUpperCase())
+  ,
+  AIRTABLE_ENABLE_MOCKUP_FIELDS: String(process.env.AIRTABLE_ENABLE_MOCKUP_FIELDS || '').toLowerCase() === 'true'
 };
 
 // Import AWS SDK for S3 operations
-const { S3Client, ListObjectsV2Command } = require('@aws-sdk/client-s3');
+const { S3Client, ListObjectsV2Command, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const s3Client = new S3Client({
   region: CONFIG.AWS_REGION,
   credentials: process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
@@ -124,6 +129,26 @@ async function airtableFindRecordIdByProductId(productId) {
   return rec?.id || null;
 }
 
+async function airtableFindRecordIdByImageFile(imageFile) {
+  const url = `https://api.airtable.com/v0/${AIRTABLE.baseId}/${encodeURIComponent(AIRTABLE.table)}`;
+  // 1) Try exact match
+  {
+    const params = { filterByFormula: `{image_file}="${imageFile}"`, maxRecords: 1 };
+    const { data } = await axios.get(url, { params, headers: { Authorization: `Bearer ${AIRTABLE.token}` } });
+    const rec = (data.records || [])[0];
+    if (rec?.id) return rec.id;
+  }
+  // 2) Try base stem match using FIND
+  const stem = String(imageFile).replace(/\.png$/i, '').replace(/\.jpg$/i, '').replace(/\.jpeg$/i, '');
+  const findFormula = `FIND("${stem}",{image_file})>0`;
+  const { data } = await axios.get(url, {
+    params: { filterByFormula: findFormula, maxRecords: 1 },
+    headers: { Authorization: `Bearer ${AIRTABLE.token}` },
+  });
+  const rec = (data.records || [])[0];
+  return rec?.id || null;
+}
+
 async function airtableUpdateFields(recordId, fields) {
   const url = `https://api.airtable.com/v0/${AIRTABLE.baseId}/${encodeURIComponent(AIRTABLE.table)}/${recordId}`;
   const payload = { fields };
@@ -188,6 +213,29 @@ const PRODUCTS = [
    --------------------------------- */
 function emailToS3Folder(email) {
   return (email || '').toLowerCase().replace(/@/g, '_at_').replace(/\./g, '_dot_');
+}
+
+function chooseDefaultLogoForEmail(email, s3Objects) {
+  const domain = String((email || '').split('@')[1] || '').toLowerCase();
+  const domainBase = (domain.split('.')[0] || '').toLowerCase();
+  const filenameOf = (k) => (k || '').split('/').pop().toLowerCase();
+
+  function score(key) {
+    const fn = filenameOf(key);
+    let s = 0;
+    if (new RegExp(`^${domainBase}(_logo)?\\.(png|jpe?g|svg)$`, 'i').test(fn)) s += 100;
+    if (new RegExp(`${domainBase}.*_logo\\.(png|jpe?g|svg)$`, 'i').test(fn)) s += 60;
+    if (/_logo\.(png|jpe?g|svg)$/i.test(fn)) s += 30;
+    if (fn.indexOf(domainBase) >= 0) s += 10;
+    return s;
+  }
+
+  let best = null, bestScore = -1;
+  for (const obj of s3Objects) {
+    const s = score(obj.Key || '');
+    if (s > bestScore) { best = obj; bestScore = s; }
+  }
+  return best || s3Objects[0];
 }
 
 function getProductImageUrl(product, customerEmail) {
@@ -259,19 +307,94 @@ function shippingOptionsFor(subtotalCents, shippingAddress) {
    --------------------------------- */
 app.use(express.json());
 app.use(express.static('public'));
+/* Upload logo via server (avoid S3 CORS) */
+app.post('/api/logo/upload', upload.single('logo'), async (req, res) => {
+  try {
+    const email = (req.body?.email || '').trim();
+    const file = req.file;
+    if (!email || !file) return res.status(400).json({ error: 'email and logo file are required' });
+    const emailFolder = emailToS3Folder(email);
+    const fileName = file.originalname || `logo_${Date.now()}.png`;
+    const key = `${emailFolder}/logo/${fileName}`;
+    // Reuse node S3 client via s3.js
+    const { uploadBuffer, urlForKey } = require('./s3');
+    await uploadBuffer(key, file.buffer, file.mimetype || 'application/octet-stream');
+    const url = urlForKey(key);
+    res.json({ ok: true, key, url });
+  } catch (e) {
+    console.error('logo upload error:', e);
+    res.status(500).json({ error: 'Failed to upload logo' });
+  }
+});
+
+/* ---------------------------------
+   S3 helpers: key builders and presigners
+   --------------------------------- */
+function companyDomainFromEmail(email) {
+  const s = String(email || '').toLowerCase();
+  const at = s.split('@')[1] || 'unknown.local';
+  return at;
+}
+
+function s3KeyForLogo(companyDomain, logoId, filename) {
+  return `company/${companyDomain}/logos/${logoId}/${filename}`;
+}
+function s3KeyForDesign(companyDomain, quoteId, versionId, productId) {
+  return `company/${companyDomain}/quotes/${quoteId}/versions/${versionId}/designs/${productId}.json`;
+}
+function s3KeyForPreview(companyDomain, quoteId, versionId, productId) {
+  return `company/${companyDomain}/quotes/${quoteId}/versions/${versionId}/previews/${productId}.webp`;
+}
+function s3KeyForVersionIndex(companyDomain, quoteId, versionId) {
+  return `company/${companyDomain}/quotes/${quoteId}/versions/${versionId}/index.json`;
+}
+
+async function presignPutObject(key, contentType, expiresSec = 900) {
+  const cmd = new PutObjectCommand({ Bucket: CONFIG.AWS_BUCKET_NAME, Key: key, ContentType: contentType });
+  return getSignedUrl(s3Client, cmd, { expiresIn: expiresSec });
+}
+async function presignGetObject(key, expiresSec = 900) {
+  const cmd = new GetObjectCommand({ Bucket: CONFIG.AWS_BUCKET_NAME, Key: key });
+  return getSignedUrl(s3Client, cmd, { expiresIn: expiresSec });
+}
+
+/* Presign upload for logo */
+app.post('/api/logo/presign', async (req, res) => {
+  try {
+    const { email, logoId, filename, contentType } = req.body || {};
+    if (!email || !logoId || !filename || !contentType) return res.status(400).json({ error: 'email, logoId, filename, contentType required' });
+    const domain = companyDomainFromEmail(email);
+    const key = s3KeyForLogo(domain, logoId, filename);
+    const url = await presignPutObject(key, contentType, 900);
+    const publicUrl = `${CONFIG.AWS_BUCKET_URL.replace(/\/$/, '')}/${key}`;
+    const getUrl = await presignGetObject(key, 900);
+    res.json({ key, url, publicUrl, getUrl });
+  } catch (e) {
+    console.error('presign logo error:', e);
+    res.status(500).json({ error: 'Failed to presign logo upload' });
+  }
+});
 
 /* Products (Airtable preferred; returns array for your UI) */
 app.get('/api/products', async (req, res) => {
-  const { customerEmail } = req.query || {};
+  const { customerEmail, quoteId, versionId } = req.query || {};
   let products;
   try { products = await fetchProductsFromAirtableCached(); }
   catch { products = PRODUCTS; }
 
   const enriched = products.map(p => {
     const baseImageUrl = `${CONFIG.PUBLIC_BASE_URL}/images/products/${encodeURIComponent(p.imageFile)}`;
-    const previewImageUrl = customerEmail
-      ? `${CONFIG.AWS_BUCKET_URL}/${emailToS3Folder(customerEmail)}/mockups/${encodeURIComponent(p.imageFile)}`
-      : null;
+    let previewImageUrl = null;
+    if (quoteId && versionId && customerEmail) {
+      const domain = companyDomainFromEmail(customerEmail);
+      const key = s3KeyForPreview(domain, quoteId, versionId, p.id);
+      // Client cannot access private S3 without presign; provide a presigned URL for quick display
+      // Note: this is ephemeral (5 minutes). Frontend should refresh as needed.
+      previewImageUrl = null; // default; will be filled by presign below
+    } else if (customerEmail) {
+      // Legacy email-based preview location; will presign below to support private buckets
+      previewImageUrl = null;
+    }
 
     const pricing = p.pricing || [];
     const pricingTable = pricing.map(t => ({
@@ -281,6 +404,43 @@ app.get('/api/products', async (req, res) => {
 
     return { ...p, baseImageUrl, previewImageUrl, pricingTable, currentPrice: Number(pricing?.[0]?.price || 0) };
   });
+
+  // If version requested, presign previews in batch (best-effort)
+  if (quoteId && versionId && customerEmail) {
+    const domain = companyDomainFromEmail(customerEmail);
+    await Promise.all(enriched.map(async (p) => {
+      let url = null;
+      try {
+        const key = s3KeyForPreview(domain, quoteId, versionId, p.id);
+        url = await presignGetObject(key, 300);
+      } catch (_) {}
+      if (!url) {
+        try {
+          const emailFolder = emailToS3Folder(customerEmail);
+          const legacyKey = `${emailFolder}/mockups/${p.imageFile}`;
+          url = await presignGetObject(legacyKey, 300);
+        } catch (_) {}
+      }
+      if (!url) {
+        // Final public URL fallback
+        const emailFolder = emailToS3Folder(customerEmail);
+        url = `${CONFIG.AWS_BUCKET_URL.replace(/\/$/, '')}/${emailFolder}/mockups/${encodeURIComponent(p.imageFile)}`;
+      }
+      p.previewImageUrl = url || p.previewImageUrl || null;
+    }));
+  } else if (customerEmail) {
+    // Legacy email-based mockups: presign each object's URL so private buckets work
+    const emailFolder = emailToS3Folder(customerEmail);
+    await Promise.all(enriched.map(async (p) => {
+      try {
+        const key = `${emailFolder}/mockups/${p.imageFile}`;
+        p.previewImageUrl = await presignGetObject(key, 300);
+      } catch (_) {
+        // Fallback to public URL if presign fails
+        p.previewImageUrl = `${CONFIG.AWS_BUCKET_URL}/${emailFolder}/mockups/${encodeURIComponent(p.imageFile)}`;
+      }
+    }));
+  }
 
   res.json(enriched); // plain array for your existing front-end
 });
@@ -343,29 +503,48 @@ app.post('/api/create-checkout', async (req, res) => {
   try {
     if (!stripe) return res.status(500).json({ error: 'Missing STRIPE_SECRET_KEY in .env' });
 
-    const { customerInfo, products: cart } = req.body || {};
+    const { customerInfo, products: cart, quoteId, versionId } = req.body || {};
     if (!Array.isArray(cart) || !cart.length) return res.status(400).json({ error: 'Cart is empty' });
 
     const safeCustomerInfo = customerInfo || { name: '', email: '', company: '', phone: '' };
     const activeProducts = await getActiveProducts();
 
-    const line_items = cart.map((item) => {
+    const line_items = await Promise.all(cart.map(async (item) => {
       const p = activeProducts.find((x) => x.id === item.productId);
       if (!p) throw new Error(`Unknown product ${item.productId}`);
       const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
       const unit = calculatePrice(p, qty);
-      const img = getProductImageUrl(p, safeCustomerInfo.email || 'default@example.com');
+      let img = getProductImageUrl(p, safeCustomerInfo.email || 'default@example.com');
+      if (quoteId && versionId && safeCustomerInfo.email) {
+        try {
+          const domain = companyDomainFromEmail(safeCustomerInfo.email);
+          const key = s3KeyForPreview(domain, quoteId, versionId, p.id);
+          img = await presignGetObject(key, 300);
+        } catch (_) {}
+      }
+
+      const productData = { name: p.name || `Item ${p.id}` };
+      if (p.description && String(p.description).trim() !== '') {
+        productData.description = p.description;
+      }
+      if (img && String(img).trim() !== '') {
+        productData.images = [img];
+      }
+      const chosenVersion = (item && typeof item.versionId === 'string') ? item.versionId : '';
+      if (chosenVersion) {
+        productData.metadata = Object.assign({}, productData.metadata || {}, { design_version: chosenVersion, quote_id: quoteId || '' });
+      }
 
       return {
         price_data: {
           currency: 'usd',
           unit_amount: Math.round(unit * 100),
           tax_behavior: 'exclusive',
-          product_data: { name: p.name, description: p.description, images: [img] }
+          product_data: productData
         },
         quantity: qty
       };
-    });
+    }));
 
     const subtotalCents = cart.reduce((sum, item) => {
       const p = activeProducts.find(ap => ap.id === item.productId);
@@ -391,6 +570,9 @@ app.post('/api/create-checkout', async (req, res) => {
       cancel_url: `${CONFIG.PUBLIC_BASE_URL}/?canceled=1`
     };
 
+    // Attach quote-level metadata, including a compact versions map
+    const versionsMap = Array.isArray(cart) ? cart.reduce((acc, it) => { if (it.productId) acc[it.productId] = it.versionId || ''; return acc; }, {}) : {};
+    sessionConfig.metadata = { quoteId: quoteId || '', versionId: versionId || '', versions_json: JSON.stringify(versionsMap) };
     const session = await stripe.checkout.sessions.create(sessionConfig);
     res.json({ url: session.url });
   } catch (err) {
@@ -410,14 +592,262 @@ app.post('/api/products/:id/boxes', async (req, res) => {
     if (!Array.isArray(boxes) || boxes.length === 0) {
       return res.status(400).json({ error: 'boxes array required' });
     }
-    const recordId = await airtableFindRecordIdByProductId(productId);
-    if (!recordId) return res.status(404).json({ error: 'Airtable record not found for product_id' });
+    let recordId = await airtableFindRecordIdByProductId(productId);
+    if (!recordId) {
+      // Fallback: try by image_file using known product list
+      try {
+        const list = await getActiveProducts();
+        const p = list.find(x => x.id === productId);
+        if (p?.imageFile) {
+          recordId = await airtableFindRecordIdByImageFile(p.imageFile);
+        }
+      } catch (_) {}
+    }
+    if (!recordId) return res.status(404).json({ error: 'Airtable record not found for product_id or image_file', productId });
 
     await airtableUpdateFields(recordId, { boxes: JSON.stringify({ boxes }) });
-    res.json({ ok: true });
+    res.json({ ok: true, recordId, productId });
   } catch (e) {
-    console.error('boxes save error:', e.message);
+    console.error('boxes save error:', e);
+    res.status(500).json({ error: String(e?.response?.data?.error || e?.message || e), details: e?.response?.data || null });
+  }
+});
+
+// Bulk update boxes: [{ productId, boxes: [{name,x1,y1,x2,y2}, ...] }, ...]
+app.post('/api/products/boxes/bulk', async (req, res) => {
+  try {
+    if (!AIRTABLE.token) return res.status(500).json({ error: 'Airtable not configured' });
+    let items = null;
+    // Accept either {items:[...]} or a map of imageFile -> {boxes:[...]}
+    if (req.body && Array.isArray(req.body.items)) {
+      items = req.body.items;
+    } else if (req.body && typeof req.body === 'object') {
+      const keys = Object.keys(req.body);
+      const looksLikeMap = keys.every(k => req.body[k] && Array.isArray(req.body[k].boxes));
+      if (looksLikeMap) {
+        items = keys.map(imageFile => ({ imageFile, boxes: req.body[imageFile].boxes }));
+      }
+    }
+    if (!items || !items.length) return res.status(400).json({ error: 'Provide items[] or an object of imageFile->{boxes:[]}' });
+
+    const results = [];
+    for (const it of items) {
+      const productId = it.productId || it.id;
+      const boxes = it.boxes;
+      if ((!productId && !it.imageFile) || !Array.isArray(boxes) || boxes.length === 0) {
+        results.push({ productId: productId || it.imageFile, ok: false, error: 'invalid item' });
+        continue;
+      }
+      try {
+        let recId = null;
+        if (productId) recId = await airtableFindRecordIdByProductId(productId);
+        if (!recId && it.imageFile) recId = await airtableFindRecordIdByImageFile(it.imageFile);
+        if (!recId) { results.push({ productId, ok: false, error: 'record not found' }); continue; }
+        await airtableUpdateFields(recId, { boxes: JSON.stringify({ boxes }) });
+        results.push({ productId: productId || it.imageFile, ok: true });
+      } catch (e) {
+        results.push({ productId: productId || it.imageFile, ok: false, error: e.message });
+      }
+    }
+    res.json({ ok: true, results });
+  } catch (e) {
+    console.error('bulk boxes error:', e);
     res.status(500).json({ error: e.message });
+  }
+});
+
+/* Create or update a design manifest for a product within a version */
+app.post('/api/quotes/:quoteId/versions/:versionId/designs/:productId', async (req, res) => {
+  try {
+    const { quoteId, versionId, productId } = req.params;
+    const { email, logoRef, placement, name } = req.body || {};
+    if (!email || !logoRef || !placement) return res.status(400).json({ error: 'email, logoRef, placement required' });
+    const domain = companyDomainFromEmail(email);
+
+    const indexKey = s3KeyForVersionIndex(domain, quoteId, versionId);
+    const designKey = s3KeyForDesign(domain, quoteId, versionId, productId);
+
+    const now = new Date().toISOString();
+    const design = { productId, logoRef, placement, updatedAt: now };
+
+    // Write design JSON
+    const designBuf = Buffer.from(JSON.stringify(design, null, 2));
+    await s3Client.send(new PutObjectCommand({ Bucket: CONFIG.AWS_BUCKET_NAME, Key: designKey, Body: designBuf, ContentType: 'application/json' }));
+
+    // Update index (best-effort; if 404, create)
+    let index = { name: name || versionId, createdAt: now, products: [], writeToken: undefined };
+    try {
+      const url = await presignGetObject(indexKey, 60);
+      const resp = await axios.get(url, { responseType: 'json' });
+      if (resp?.data) index = resp.data;
+    } catch (_) {}
+    const existsIdx = (index.products || []).findIndex(p => p.productId === productId);
+    if (existsIdx >= 0) index.products[existsIdx] = { productId, updatedAt: now };
+    else (index.products = index.products || []).push({ productId, updatedAt: now });
+    const indexBuf = Buffer.from(JSON.stringify(index, null, 2));
+    await s3Client.send(new PutObjectCommand({ Bucket: CONFIG.AWS_BUCKET_NAME, Key: indexKey, Body: indexBuf, ContentType: 'application/json' }));
+
+    res.json({ ok: true, designKey, indexKey });
+  } catch (e) {
+    console.error('save design error:', e);
+    res.status(500).json({ error: 'Failed to save design' });
+  }
+});
+
+/* Get presigned preview URL for a product/version */
+app.get('/api/quotes/:quoteId/versions/:versionId/previews/:productId', async (req, res) => {
+  try {
+    const { quoteId, versionId, productId } = req.params;
+    const { email } = req.query || {};
+    if (!email) return res.status(400).json({ error: 'email required' });
+    const domain = companyDomainFromEmail(email);
+    const key = s3KeyForPreview(domain, quoteId, versionId, productId);
+    const url = await presignGetObject(key, 300);
+    res.json({ key, url });
+  } catch (e) {
+    console.error('presign preview error:', e);
+    res.status(500).json({ error: 'Failed to presign preview' });
+  }
+});
+
+/* Render and upload a preview image (composite) given design manifest */
+app.post('/api/quotes/:quoteId/versions/:versionId/previews/:productId/render', async (req, res) => {
+  try {
+    const { quoteId, versionId, productId } = req.params;
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ error: 'email required' });
+    const domain = companyDomainFromEmail(email);
+
+    // Load design manifest
+    const designKey = s3KeyForDesign(domain, quoteId, versionId, productId);
+    const designUrl = await presignGetObject(designKey, 60);
+    const { data: design } = await axios.get(designUrl, { responseType: 'json' });
+
+    // Resolve base image path (local file in public/images/products)
+    const products = await getActiveProducts();
+    const p = products.find(x => x.id === productId);
+    if (!p) return res.status(404).json({ error: 'Unknown product' });
+    const basePath = path.join(__dirname, 'public', 'images', 'products', p.imageFile);
+    if (!fs.existsSync(basePath)) return res.status(404).json({ error: 'Base image missing on server' });
+
+    // Load logo (download to buffer)
+    const logoHttpUrl = design.logoRef.startsWith('s3://')
+      ? await presignGetObject(design.logoRef.replace(/^s3:\/\//, '').replace(`${CONFIG.AWS_BUCKET_NAME}/`, ''), 120)
+      : design.logoRef;
+    const logoResp = await axios.get(logoHttpUrl, { responseType: 'arraybuffer' });
+    const logoBuffer = Buffer.from(logoResp.data);
+
+    const placement = design.placement?.px;
+    if (!placement) return res.status(400).json({ error: 'placement.px required' });
+    const { x1, y1, x2, y2 } = placement;
+
+    // Composite with sharp
+    const baseImage = sharp(basePath);
+    const metadata = await baseImage.metadata();
+    const width = Math.max(1, Math.round(x2 - x1));
+    const height = Math.max(1, Math.round(y2 - y1));
+    // Resize logo to fit within box with transparent letterboxing (no black bars)
+    const resizedLogo = await sharp(logoBuffer)
+      .ensureAlpha() // add alpha channel if source lacks one (e.g., JPEG)
+      .resize({ width, height, fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png() // keep transparency in intermediate buffer
+      .toBuffer();
+    const compositeBuf = await sharp(basePath)
+      .composite([{ input: resizedLogo, left: Math.round(x1), top: Math.round(y1), blend: 'over' }])
+      .webp({ quality: 90 })
+      .toBuffer();
+
+    // Upload preview to S3 (private)
+    const previewKey = s3KeyForPreview(domain, quoteId, versionId, productId);
+    await s3Client.send(new PutObjectCommand({ Bucket: CONFIG.AWS_BUCKET_NAME, Key: previewKey, Body: compositeBuf, ContentType: 'image/webp' }));
+    const previewUrl = await presignGetObject(previewKey, 300);
+
+    res.json({ ok: true, previewKey, previewUrl, size: compositeBuf.length, base: { width: metadata.width, height: metadata.height } });
+  } catch (e) {
+    console.error('render preview error:', e);
+    res.status(500).json({ error: 'Failed to render preview' });
+  }
+});
+
+/* Minimal quote/version create & list (index.json only) */
+app.post('/api/quotes/:quoteId/versions', async (req, res) => {
+  try {
+    const { quoteId } = req.params;
+    const { email, versionId, name } = req.body || {};
+    if (!email || !versionId) return res.status(400).json({ error: 'email and versionId required' });
+    const domain = companyDomainFromEmail(email);
+    const key = s3KeyForVersionIndex(domain, quoteId, versionId);
+    const now = new Date().toISOString();
+    const index = { name: name || versionId, createdBy: email, createdAt: now, products: [] };
+    await s3Client.send(new PutObjectCommand({ Bucket: CONFIG.AWS_BUCKET_NAME, Key: key, Body: Buffer.from(JSON.stringify(index, null, 2)), ContentType: 'application/json' }));
+    res.json({ ok: true, key });
+  } catch (e) {
+    console.error('create version error:', e);
+    res.status(500).json({ error: 'Failed to create version' });
+  }
+});
+
+app.get('/api/quotes/:quoteId/versions/:versionId', async (req, res) => {
+  try {
+    const { quoteId, versionId } = req.params;
+    const { email } = req.query || {};
+    if (!email) return res.status(400).json({ error: 'email required' });
+    const domain = companyDomainFromEmail(email);
+    const key = s3KeyForVersionIndex(domain, quoteId, versionId);
+    const url = await presignGetObject(key, 60);
+    const { data } = await axios.get(url, { responseType: 'json' });
+    res.json({ key, index: data });
+  } catch (e) {
+    console.error('get version error:', e);
+    res.status(500).json({ error: 'Failed to get version' });
+  }
+});
+
+// List versions that have a design for a specific product
+app.get('/api/quotes/:quoteId/products/:productId/versions', async (req, res) => {
+  try {
+    const { quoteId, productId } = req.params;
+    const { email } = req.query || {};
+    if (!email) return res.status(400).json({ error: 'email required' });
+    const domain = companyDomainFromEmail(email);
+    const prefix = `company/${domain}/quotes/${quoteId}/versions/`;
+    const command = new ListObjectsV2Command({ Bucket: CONFIG.AWS_BUCKET_NAME, Prefix: prefix });
+    const out = await s3Client.send(command);
+    const versions = new Set();
+    for (const obj of out.Contents || []) {
+      const key = obj.Key || '';
+      // match versions/<versionId>/designs/<productId>.json
+      const parts = key.split('/');
+      const idx = parts.indexOf('versions');
+      if (idx >= 0 && parts[idx+2] === 'designs' && parts[idx+3] === `${productId}.json`) {
+        const versionId = parts[idx+1];
+        if (versionId) versions.add(versionId);
+      }
+    }
+    res.json({ versions: Array.from(versions) });
+  } catch (e) {
+    console.error('list product versions error:', e);
+    res.status(500).json({ error: 'Failed to list product versions' });
+  }
+});
+
+/* List versions for a quote by inspecting S3 prefixes */
+app.get('/api/quotes/:quoteId/versions', async (req, res) => {
+  try {
+    const { quoteId } = req.params;
+    const { email } = req.query || {};
+    if (!email) return res.status(400).json({ error: 'email required' });
+    const domain = companyDomainFromEmail(email);
+    const prefix = `company/${domain}/quotes/${quoteId}/versions/`;
+    const command = new ListObjectsV2Command({ Bucket: CONFIG.AWS_BUCKET_NAME, Prefix: prefix, Delimiter: '/' });
+    const out = await s3Client.send(command);
+    const versions = (out.CommonPrefixes || [])
+      .map(cp => (cp.Prefix || '').slice(prefix.length).replace(/\/$/, ''))
+      .filter(v => !!v);
+    res.json({ versions });
+  } catch (e) {
+    console.error('list versions error:', e);
+    res.status(500).json({ error: 'Failed to list versions' });
   }
 });
 
@@ -451,13 +881,26 @@ app.get('/api/customer/:email/logo', async (req, res) => {
       return res.status(404).json({ error: 'No logo found', hasLogo: false });
     }
 
-    // Return the most recent logo file
-    const logoFile = logoFiles[0];
-    const logoUrl = `${CONFIG.AWS_BUCKET_URL}/${logoFile.Key}`;
+    // Prefer filename-based company default: match on filename only
+    const domain = String(email.split('@')[1] || '').toLowerCase();
+    const domainBase = (domain.split('.')[0] || '').toLowerCase();
+    const filenameOf = (k) => (k || '').split('/').pop().toLowerCase();
+    // Exact: d2completion_logo.* or d2completion.*
+    const exactRe = new RegExp(`^${domainBase}(_logo)?\\.(png|jpe?g|svg)$`, 'i');
+    // Prefer *_logo.* containing company base
+    const containsLogoRe = new RegExp(`${domainBase}.*_logo\\.(png|jpe?g|svg)$`, 'i');
+    const endsWithLogoRe = /_logo\.(png|jpe?g|svg)$/i;
+    const preferredExact = logoFiles.find(f => exactRe.test(filenameOf(f.Key)));
+    const preferredContainsLogo = logoFiles.find(f => containsLogoRe.test(filenameOf(f.Key)));
+    const preferredEndsWithLogo = logoFiles.find(f => endsWithLogoRe.test(filenameOf(f.Key)));
+    const logoFile = preferredExact || preferredContainsLogo || preferredEndsWithLogo || logoFiles[0];
+    let logoUrl = null;
+    try { logoUrl = await presignGetObject(logoFile.Key, 300); } catch { logoUrl = `${CONFIG.AWS_BUCKET_URL}/${logoFile.Key}`; }
 
     res.json({
       hasLogo: true,
       logoUrl: logoUrl,
+      key: logoFile.Key,
       filename: logoFile.Key.split('/').pop(),
       uploadedAt: logoFile.LastModified
     });
@@ -479,8 +922,26 @@ app.get('/api/customer/:email/logo', async (req, res) => {
 app.post('/api/products/:id/mockup', async (req, res) => {
   try {
     const productId = req.params.id;
-    const { email, logoUrl } = req.body || {};
-    if (!email || !logoUrl) return res.status(400).json({ error: 'email and logoUrl required' });
+    let { email, logoUrl } = req.body || {};
+    if (!email) return res.status(400).json({ error: 'email required' });
+
+    // If logoUrl not provided, pick a default logo for this email
+    if (!logoUrl) {
+      try {
+        const emailFolder = emailToS3Folder(email);
+        const logoPrefix = `${emailFolder}/logo/`;
+        const command = new ListObjectsV2Command({ Bucket: CONFIG.AWS_BUCKET_NAME, Prefix: logoPrefix, MaxKeys: 100 });
+        const response = await s3Client.send(command);
+        const files = (response.Contents || [])
+          .filter(o => o.Key && !o.Key.endsWith('/'))
+          .filter(o => /\.(png|jpe?g|svg)$/i.test(o.Key));
+        if (!files.length) throw new Error('No logo files');
+        const pick = chooseDefaultLogoForEmail(email, files);
+        try { logoUrl = await presignGetObject(pick.Key, 300); } catch { logoUrl = `${CONFIG.AWS_BUCKET_URL.replace(/\/$/, '')}/${pick.Key}`; }
+      } catch (e) {
+        return res.status(400).json({ error: 'logo not found for email', details: String(e) });
+      }
+    }
 
     // Find product (Airtable preferred, else local)
     const list = await getActiveProducts();
@@ -516,13 +977,21 @@ app.post('/api/products/:id/mockup', async (req, res) => {
     ];
     let pyStdout = '';
     let pyStderr = '';
-    const py = spawn('python3', args);
+    const isWindows = process.platform === 'win32';
+    // Prefer project venv python if available
+    const venvPython = isWindows
+      ? path.join(__dirname, '.venv', 'Scripts', 'python.exe')
+      : path.join(__dirname, '.venv', 'bin', 'python3');
+    const hasVenvPython = fs.existsSync(venvPython);
+    const pythonCmd = hasVenvPython ? venvPython : (isWindows ? 'py' : 'python3');
+    const pythonPrefixArgs = hasVenvPython ? [] : (isWindows ? ['-3'] : []);
+    const py = spawn(pythonCmd, [...pythonPrefixArgs, ...args], { stdio: ['ignore', 'pipe', 'pipe'], env: process.env });
     py.stdout.on('data', (d) => { pyStdout += d.toString(); });
     py.stderr.on('data', (d) => { pyStderr += d.toString(); });
     py.on('close', async (code) => {
       if (code !== 0) {
         console.error('mockup stderr:', pyStderr);
-        return res.status(500).json({ error: `mockup generation failed (${code})` });
+        return res.status(500).json({ error: `mockup generation failed (${code})`, stderr: pyStderr, stdout: pyStdout });
       }
 
       let manifest = null;
@@ -541,7 +1010,7 @@ app.post('/api/products/:id/mockup', async (req, res) => {
       const pdfUrl = (pm.pdf_urls && pm.pdf_urls[0]) || null;
       const previewUrl = (pm.preview_urls && pm.preview_urls[0]) || null;
 
-      if (recId) {
+      if (recId && CONFIG.AIRTABLE_ENABLE_MOCKUP_FIELDS) {
         const fields = {
           last_mockup_url: pngUrl,
           last_mockup_pdf_url: pdfUrl,
@@ -559,6 +1028,7 @@ app.post('/api/products/:id/mockup', async (req, res) => {
         ok: true,
         placeholder_base_url: placeholderBaseUrl,
         mockup: { pngUrl, pdfUrl, previewUrl },
+        chosen_logo_url: logoUrl,
         manifest
       });
     });

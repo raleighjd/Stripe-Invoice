@@ -1,0 +1,95 @@
+Stripe-Invoice/
+  .git/
+  .gitignore
+  node_modules/
+  package.json
+  package-lock.json
+  products_from_scraper.csv
+  products_full.csv
+  s3.js
+  server.js
+
+  public/
+    index.html
+    css/
+    js/
+      catalog.js
+    images/
+      red-long-logo.png
+      red-favicon-logo.png
+      white-favicon-logo.png
+      products/
+        18500_Black_Flat_Front-01_big_back.png
+        18500_Black_Flat_Back-01.png
+        18500_Dark Chocolate_Flat_Front-01_big_back.png
+        18500_Dark Chocolate_Flat_Back-01.png
+        2000_black_flat_front-01_right_chest.png
+        2000_charcoal_flat_front-01_right_chest.png
+        5400_black_flat_back-01.png
+        5400_black_flat_front-01_right_chest.png
+        C112_greysteelneonorange_full_front-01_right_chest.png
+        C932_Black_Flat_Front-01_right_chest.png
+        CT104050_black_flat_front-01_right_chest.png
+        CT104050_carharttbrown_flat_front-01_right_chest.png
+        CSV40_duckbrown_flat_front-01_right_chest.png
+        CSV106_safetyyellow_flat_front_right_chest.png
+        CSV106_safetyyellow_flat_back.png
+        TLJ763H_Duck Brown_Flat_Front-01_right_chest.png
+        TLJ763H_Black_Flat_Front-01_right_chest.png
+        PC78SP_JET BLACK_Flat_Front-01_right_chest.png
+        NKDC1963_Black_Flat_Front-01_right_chest.png
+        K540_Black_Flat_Front-01_right_chest.png
+        G2400_darkchocolate_flat_front-01_big_back.png
+        G2400_darkchocolate_flat_back-01.png
+        G2400_charcoal_flat_front-01_big_back.png
+        G2400_charcoal_flat_back-01.png
+        G2400_black_flat_front-01_big_back.png
+        G2400_Black_flat_back-01.png
+        F170_Black_flat_front-01_big_back.png
+        F170_black_flat_back-01.png
+        CT104050_carharttbrown_flat_front-01_right_chest.png
+        CT104050_black_flat_front-01_right_chest.png
+        CSV40_duckbrown_flat_front-01_right_chest.png
+        C932_Black_Flat_Front-01_right_chest.png
+        5400_black_flat_front-01_right_chest.png
+        5400_black_flat_back-01.png
+        2000_charcoal_flat_front-01_right_chest.png
+        2000_black_flat_front-01_right_chest.png
+        carhartt_jacket_embr.png
+        carhartt_jacket_embr_1.png
+        generic_polo_embr.png
+        generic_unknown_embr.png
+        generic_unknown_embr_1.png
+        generic_unknown_embr_2.png
+        generic_unknown_embr_3.png
+        generic_unknown_embr_4.png
+        generic_unknown_embr_5.png
+        generic_unknown_embr_6.png
+        generic_unknown_embr_7.png
+        generic_unknown_embr_8.png
+        gildan_hoodie_print.png
+        gildan_tshirt_print.png
+        newera_cap_embr.png
+        nike_polo_embr.png
+        northface_unknown_embr.png
+        portauth_cap_embr.png
+        richardson_cap_embr.png
+        richardson_cap_print.png
+        sporttek_unknown_embr.png
+        sporttek_unknown_embr_1.png
+
+  python/
+    bbox_labeler.py
+    build_mockups_from_airtable.py
+    bulletproof_enhanced_pipeline.py
+    bulletproof_scraper.py
+    products.txt
+    products_full.csv
+    rename_images_to_products.py
+    rename_product_images.js
+    export_products_to_csv.js
+    upload_s3.py
+
+  scripts/
+    export_products_from_js.js
+    export_products_to_csv.js 

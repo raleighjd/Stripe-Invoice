@@ -1,0 +1,310 @@
+{
+    "CSV106_safetyyellow_flat_front.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 1610,
+                "y1": 1524,
+                "x2": 1929,
+                "y2": 1660
+            }
+        ]
+    },
+    "CSV106_safetyyellow_flat_back.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 1669,
+                "y1": 1061,
+                "x2": 2619,
+                "y2": 1426
+            }
+        ]
+    },
+    "CSV40_duckbrown_flat_front-01.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 2337,
+                "y1": 1217,
+                "x2": 2719,
+                "y2": 1364
+            }
+        ]
+    },
+    "CT104050_black_flat_front-01.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 2396,
+                "y1": 1539,
+                "x2": 2721,
+                "y2": 1664
+            }
+        ]
+    },
+    "2000_black_flat_front-01.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 2290,
+                "y1": 1282,
+                "x2": 2640,
+                "y2": 1417
+            }
+        ]
+    },
+    "2000_charcoal_flat_front-01.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 2290,
+                "y1": 1282,
+                "x2": 2640,
+                "y2": 1417
+            }
+        ]
+    },
+    "5400_black_flat_front-01.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 2325,
+                "y1": 1377,
+                "x2": 2715,
+                "y2": 1527
+            }
+        ]
+    },
+    "5400_black_flat_back-01.png": {
+        "boxes": [
+            {
+                "name": "big_back",
+                "x1": 1613,
+                "y1": 1019,
+                "x2": 2554,
+                "y2": 1381
+            }
+        ]
+    },
+    "18500_Black_Flat_Back-01.png": {
+        "boxes": [
+            {
+                "name": "big_back",
+                "x1": 1613,
+                "y1": 1220,
+                "x2": 2554,
+                "y2": 1582
+            }
+        ]
+    },
+    "18500_Black_Flat_Front-01.png": {
+        "boxes": [
+            {
+                "name": "big_back",
+                "x1": 2290,
+                "y1": 1413,
+                "x2": 2681,
+                "y2": 1563
+            }
+        ]
+    },
+    "18500_Dark Chocolate_Flat_Back-01.png": {
+        "boxes": [
+            {
+                "name": "big_back",
+                "x1": 1613,
+                "y1": 1220,
+                "x2": 2554,
+                "y2": 1582
+            }
+        ]
+    },
+    "18500_Dark Chocolate_Flat_Front-01.png": {
+        "boxes": [
+            {
+                "name": "big_back",
+                "x1": 2290,
+                "y1": 1413,
+                "x2": 2681,
+                "y2": 1563
+            }
+        ]
+    },
+    "C112_greysteelneonorange_full_front-01.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 1533,
+                "y1": 1466,
+                "x2": 2672,
+                "y2": 1903
+            }
+        ]
+    },
+    "C932_Black_Flat_Front-01.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 1514,
+                "y1": 1514,
+                "x2": 2653,
+                "y2": 1951
+            }
+        ]
+    },
+    "CT104050_carharttbrown_flat_front-01.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 2396,
+                "y1": 1539,
+                "x2": 2721,
+                "y2": 1664
+            }
+        ]
+    },
+    "F170_black_flat_back-01.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 1606,
+                "y1": 1239,
+                "x2": 2621,
+                "y2": 1707
+            }
+        ]
+    },
+    "F170_black_flat_front-01.png": {
+        "boxes": [
+            {
+                "name": "big_back",
+                "x1": 2436,
+                "y1": 1444,
+                "x2": 2817,
+                "y2": 1591
+            }
+        ]
+    },
+    "G2400_Black_flat_back-01.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 1611,
+                "y1": 895,
+                "x2": 2573,
+                "y2": 1255
+            }
+        ]
+    },
+    "G2400_Black_flat_front-01.png": {
+        "boxes": [
+            {
+                "name": "big_back",
+                "x1": 2404,
+                "y1": 1239,
+                "x2": 2755,
+                "y2": 1374
+            }
+        ]
+    },
+    "G2400_charcoal_flat_back-01.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 1611,
+                "y1": 895,
+                "x2": 2573,
+                "y2": 1255
+            }
+        ]
+    },
+    "G2400_charcoal_flat_front-01.png": {
+        "boxes": [
+            {
+                "name": "big_back",
+                "x1": 2404,
+                "y1": 1239,
+                "x2": 2755,
+                "y2": 1374
+            }
+        ]
+    },
+    "G2400_darkchocolate_flat_back-01.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 1611,
+                "y1": 895,
+                "x2": 2573,
+                "y2": 1255
+            }
+        ]
+    },
+    "G2400_darkchocolate_flat_front-01.png": {
+        "boxes": [
+            {
+                "name": "big_back",
+                "x1": 2404,
+                "y1": 1239,
+                "x2": 2755,
+                "y2": 1374
+            }
+        ]
+    },
+    "K540_Black_Flat_Front-01.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 2260,
+                "y1": 1187,
+                "x2": 2594,
+                "y2": 1316
+            }
+        ]
+    },
+    "NKDC1963_Black_Flat_Front-01.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 2249,
+                "y1": 1201,
+                "x2": 2583,
+                "y2": 1330
+            }
+        ]
+    },
+    "PC78SP_JET BLACK_Flat_Front-01.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 2236,
+                "y1": 1094,
+                "x2": 2650,
+                "y2": 1254
+            }
+        ]
+    },
+    "TLJ763H_Black_Flat_Front-01.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 2369,
+                "y1": 1590,
+                "x2": 2750,
+                "y2": 1737
+            }
+        ]
+    },
+    "TLJ763H_Duck Brown_Flat_Front-01.png": {
+        "boxes": [
+            {
+                "name": "right_chest",
+                "x1": 2369,
+                "y1": 1590,
+                "x2": 2750,
+                "y2": 1737
+            }
+        ]
+    }
+}

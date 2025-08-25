@@ -75,7 +75,14 @@ function renderProducts(products) {
           if (!resp.ok || !j.ok) throw new Error(j.error || 'mockup failed');
           alert('✅ Mockup generated & uploaded. Refreshing…');
           const qEmail = encodeURIComponent(email);
-          fetch(`/api/products?customerEmail=${qEmail}`).then(r => r.json()).then(renderProducts);
+          const params = new URLSearchParams(window.location.search);
+          const quoteId = params.get('quoteId') || '';
+          const versionId = params.get('v') || params.get('versionId') || '';
+          const qs = new URLSearchParams();
+          if (qEmail) qs.set('customerEmail', qEmail);
+          if (quoteId) qs.set('quoteId', quoteId);
+          if (versionId) qs.set('versionId', versionId);
+          fetch(`/api/products?${qs.toString()}`).then(r => r.json()).then(renderProducts);
         } catch (err) {
           console.error(err);
           alert('❌ Mockup failed: ' + err.message);
@@ -84,7 +91,7 @@ function renderProducts(products) {
     }, { once: true });
   }
   
-  /* ====== Minimal in-page BBox labeler (saves to Airtable) ====== */
+  /* ====== Minimal in-page BBox labeler (saves to Airtable & version design) ====== */
   function openBBoxModal(product) {
     let modal = document.getElementById('bboxModal');
     if (!modal) {
@@ -105,6 +112,7 @@ function renderProducts(products) {
           <div style="display:flex; gap:8px; margin-top:12px; align-items:center;">
             <label>Area name</label>
             <input id="bboxAreaName" type="text" value="right_chest" style="padding:6px 8px;border:1px solid #ccc;border-radius:6px;">
+            <input id="bboxVersionName" type="text" placeholder="Version name (e.g., V1)" style="padding:6px 8px;border:1px solid #ccc;border-radius:6px;">
             <span style="flex:1"></span>
             <button id="bboxClear" style="background:#eee;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;">Clear</button>
             <button id="bboxSave"  style="background:#111;color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;">Save</button>
@@ -117,6 +125,7 @@ function renderProducts(products) {
     const canvas = document.getElementById('bboxCanvas');
     const title = document.getElementById('bboxTitle');
     const areaInput = document.getElementById('bboxAreaName');
+    const versionNameInput = document.getElementById('bboxVersionName');
   
     title.textContent = `Set Bounding Box — ${product.name}`;
     imgEl.src = product.baseImageUrl;
@@ -170,29 +179,63 @@ function renderProducts(products) {
   
     function clearBox() { rect = null; draw(); }
   
-    function saveBox() {
+    async function saveBox() {
       if (!rect) { alert('Draw a box first.'); return; }
+      const params = new URLSearchParams(window.location.search);
+      const quoteId = params.get('quoteId') || params.get('q') || 'QDEFAULT';
+      const versionId = params.get('v') || params.get('versionId') || (versionNameInput.value || 'V1');
+      const email = localStorage.getItem('customerEmail') || prompt('Customer email for version (required):', '');
+      if (!email) return;
+      localStorage.setItem('customerEmail', email);
+  
       const n = toNaturalCoords({
         x: Math.min(rect.x, rect.x+rect.w),
         y: Math.min(rect.y, rect.y+rect.h),
         w: Math.abs(rect.w),
         h: Math.abs(rect.h)
       });
-      const payload = {
-        boxes: [{ name: (areaInput.value || 'right_chest'), x1:n.x1, y1:n.y1, x2:n.x2, y2:n.y2 }]
-      };
-      fetch(`/api/products/${encodeURIComponent(product.id)}/boxes`, {
-        method: 'POST',
-        headers: { 'Content-Type':'application/json' },
-        body: JSON.stringify(payload)
-      }).then(r => r.json()).then(j => {
-        if (!j.ok) throw new Error(j.error || 'Save failed');
-        alert('✅ Saved bounding box to Airtable');
-        close();
-      }).catch(err => {
-        console.error(err);
-        alert('❌ Failed to save: ' + err.message);
+  
+      // Save version (index)
+      await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/versions`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, versionId, name: versionId })
       });
+  
+      // Save design manifest
+      const logoRef = prompt('Enter logo URL (S3 or https):', '') || '';
+      if (!logoRef) { alert('Logo URL required to save design.'); return; }
+      const designPayload = {
+        email, logoRef,
+        placement: { px: { x1:n.x1, y1:n.y1, x2:n.x2, y2:n.y2 } },
+        name: versionId
+      };
+      const saveResp = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/versions/${encodeURIComponent(versionId)}/designs/${encodeURIComponent(product.id)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(designPayload)
+      });
+      if (!saveResp.ok) { alert('Failed to save design'); return; }
+  
+      // Render preview
+      const renderResp = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/versions/${encodeURIComponent(versionId)}/previews/${encodeURIComponent(product.id)}/render`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email })
+      });
+      const rj = await renderResp.json();
+      if (!renderResp.ok || !rj.ok) { alert('Failed to render preview'); return; }
+  
+      // Reload products with version filter
+      const qs = new URLSearchParams();
+      qs.set('customerEmail', email);
+      qs.set('quoteId', quoteId);
+      qs.set('versionId', versionId);
+      const products = await fetch(`/api/products?${qs.toString()}`).then(r => r.json());
+      renderProducts(products);
+  
+      // Update URL with version for sharing
+      const url = new URL(window.location.href);
+      url.searchParams.set('quoteId', quoteId);
+      url.searchParams.set('v', versionId);
+      window.history.replaceState({}, '', url.toString());
+      alert('✅ Design saved. Share this URL to load the edited version.');
+      close();
     }
   
     function open() {
@@ -208,7 +251,7 @@ function renderProducts(products) {
   
     document.getElementById('bboxClose').onclick = close;
     document.getElementById('bboxClear').onclick = clearBox;
-    document.getElementById('bboxSave').onclick  = saveBox;
+    document.getElementById('bboxSave').onclick  = () => { saveBox().catch(err => { console.error(err); alert('Error: ' + err.message); }); };
     imgEl.onload = resizeCanvas;
     window.addEventListener('resize', resizeCanvas);
   
@@ -228,8 +271,14 @@ function renderProducts(products) {
   
   async function fetchAndRenderProducts(customerEmail) {
     try {
-      const q = customerEmail ? `?customerEmail=${encodeURIComponent(customerEmail)}` : '';
-      const resp = await fetch(`/api/products${q}`, { headers: { 'Accept': 'application/json' } });
+      const params = new URLSearchParams(window.location.search);
+      const quoteId = params.get('quoteId') || '';
+      const versionId = params.get('v') || params.get('versionId') || '';
+      const q = new URLSearchParams();
+      if (customerEmail) q.set('customerEmail', customerEmail);
+      if (quoteId) q.set('quoteId', quoteId);
+      if (versionId) q.set('versionId', versionId);
+      const resp = await fetch(`/api/products?${q.toString()}`, { headers: { 'Accept': 'application/json' } });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const products = await resp.json();
       if (!Array.isArray(products)) throw new Error('Unexpected response shape');

@@ -12,8 +12,7 @@ s3 = boto3.client('s3', region_name=REGION)
 def upload_file(local_path, key, public=True):
     ctype = mimetypes.guess_type(local_path)[0] or 'application/octet-stream'
     extra = {'ContentType': ctype}
-    if public:
-        extra['ACL'] = 'public-read'
+    # Many buckets have ACLs disabled; avoid setting ACL
     s3.upload_file(local_path, BUCKET, key, ExtraArgs=extra)
     return f'{BASE_URL}/{key}' if BASE_URL else f's3://{BUCKET}/{key}'
 

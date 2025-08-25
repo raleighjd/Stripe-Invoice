@@ -11,7 +11,79 @@ except Exception:
     USE_AIRTABLE_SDK = False
 
 # Your generator (provided by you)
-from generate_mockups_pipeline_optimized import process_single_logo
+try:
+    from generate_mockups_pipeline_optimized import process_single_logo  # noqa: F401
+except Exception:
+    # Fallback: minimal PIL-based compositor
+    from PIL import Image
+
+    def process_single_logo(info, products_dir, output_dir, pdf_output_dir, preview_output_dir, mockup_config, logos_dir):
+        """
+        Minimal fallback compositor:
+        - info: (logo_filename, _, _)
+        - mockup_config: { image_file: { boxes: [ {x1,y1,x2,y2,name}, ... ] } }
+        - Writes composited PNG to output_dir and a preview copy to preview_output_dir
+        - If exactly one image_file is targeted, writes output using the original image_file name
+        """
+        logo_filename = info[0]
+        logo_path = os.path.join(logos_dir, logo_filename)
+        try:
+            logo_img = Image.open(logo_path).convert("RGBA")
+        except Exception as e:
+            raise SystemExit(f"Failed to open logo: {e}")
+
+        single_target = len(mockup_config.keys()) == 1
+
+        for image_file, cfg in mockup_config.items():
+            base_path = os.path.join(products_dir, image_file)
+            if not os.path.isfile(base_path):
+                # Try url-quoted fallback path
+                base_path = os.path.join(products_dir, quote(image_file))
+            try:
+                base_img = Image.open(base_path).convert("RGBA")
+            except Exception:
+                # Skip this one if base can't be opened
+                continue
+
+            boxes = cfg.get("boxes", [])
+            if not boxes:
+                continue
+            box = boxes[0]
+            x1, y1, x2, y2 = int(box["x1"]), int(box["y1"]), int(box["x2"]), int(box["y2"]) 
+            w, h = max(1, x2 - x1), max(1, y2 - y1)
+
+            # Resize logo preserving aspect ratio to fit within box
+            logo_w, logo_h = logo_img.size
+            scale = min(w / logo_w, h / logo_h)
+            new_size = (max(1, int(logo_w * scale)), max(1, int(logo_h * scale)))
+            logo_resized = logo_img.resize(new_size, Image.LANCZOS)
+
+            # Center inside box
+            offset_x = x1 + max(0, (w - new_size[0]) // 2)
+            offset_y = y1 + max(0, (h - new_size[1]) // 2)
+
+            composite = base_img.copy()
+            composite.alpha_composite(logo_resized, (offset_x, offset_y))
+
+            # Use original filename when single target to overwrite placeholder and match UI
+            if single_target:
+                out_name = os.path.basename(image_file)
+            else:
+                out_name = os.path.splitext(os.path.basename(image_file))[0] + "_mockup.png"
+
+            out_path = os.path.join(output_dir, out_name)
+            os.makedirs(output_dir, exist_ok=True)
+            # Preserve extension based on out_name
+            if out_name.lower().endswith(('.jpg', '.jpeg')):
+                composite.convert("RGB").save(out_path, "JPEG", quality=92)
+            else:
+                composite.convert("RGBA").save(out_path, "PNG")
+
+            # Write preview copy
+            os.makedirs(preview_output_dir, exist_ok=True)
+            shutil.copy2(out_path, os.path.join(preview_output_dir, out_name))
+
+            # Optional: PDF skipped in fallback
 
 # Python S3 uploader
 from upload_s3 import upload_folder as upload_folder_to_s3

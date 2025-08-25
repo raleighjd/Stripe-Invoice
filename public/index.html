@@ -547,12 +547,21 @@
     let products = [];
     let quote = [];
     let taxAmount = 0;
+    const ADMIN_BBOX_TOKEN = 'directum-bbox-setup';
+    window.__bboxForcedMode = false;
+    window.__bboxQueue = [];
 
     // Initialize
     window.addEventListener('DOMContentLoaded', async () => {
       const params = new URLSearchParams(window.location.search);
       if (params.get('success')) showMessage('Payment completed successfully!', 'success');
       if (params.get('canceled')) showMessage('Payment was canceled.', 'error');
+      // Preload customerEmail from URL so products auto-load branded previews
+      const urlEmail = (params.get('customerEmail') || '').trim();
+      if (urlEmail) {
+        const emailEl = document.getElementById('customerEmail');
+        if (emailEl) emailEl.value = urlEmail;
+      }
       
       // Handle logo fallback with debugging
       const logo = document.getElementById('brandLogo');
@@ -590,9 +599,49 @@
       testImg.onerror = () => console.log('❌ Logo path test failed - file may not exist at: public/images/red-long-logo.png');
       testImg.src = 'images/red-long-logo.png';
       
+      // Track quote from URL once; stop global version mode
+      window.__quoteId = (params.get('quoteId') || '').trim();
+      window.__versionId = '';
+
+      // If a quote is present, try to load versions list
+      if (window.__quoteId && urlEmail) {
+        try { await loadVersions(urlEmail); } catch (e) { console.warn('versions load failed', e); }
+      }
+      
       await loadProducts();
       updateQuoteDisplay();
+
+      // Secret forced BBox wizard
+      const token = (params.get('bboxToken') || params.get('bbox') || '').trim();
+      if (token && token === ADMIN_BBOX_TOKEN) {
+        window.__bboxForcedMode = true;
+        const missing = (products || []).filter(p => !Array.isArray(p.boxes) || p.boxes.length === 0);
+        window.__bboxQueue = missing.map(p => p.id);
+        if (window.__bboxQueue.length === 0) {
+          showMessage('All products already have positions.', 'success');
+        } else {
+          showMessage(`BBox setup: ${window.__bboxQueue.length} products need positions`, 'success');
+          startForcedBBoxWizard();
+        }
+      }
     });
+
+    async function loadVersions(email) {
+      if (!window.__quoteId || !email) { window.__versions = []; return; }
+      try {
+        const data = await fetch(`/api/quotes/${encodeURIComponent(window.__quoteId)}/versions?email=${encodeURIComponent(email)}`).then(r => r.json());
+        window.__versions = Array.isArray(data?.versions) ? data.versions : [];
+      } catch (e) {
+        console.warn('loadVersions failed', e);
+        window.__versions = [];
+      }
+    }
+
+    function startForcedBBoxWizard() {
+      const next = window.__bboxQueue.shift();
+      if (!next) { showMessage('✅ BBox setup complete', 'success'); return; }
+      openBBoxModal(next, { forced: true, onDone: () => setTimeout(startForcedBBoxWizard, 300) });
+    }
 
     // Messages
     function showMessage(text, type = 'success') {
@@ -608,7 +657,10 @@
       try {
         console.log('Loading products...');
         const email = (document.getElementById('customerEmail')?.value || '').trim();
-        const url = email ? `/api/products?customerEmail=${encodeURIComponent(email)}` : '/api/products';
+        const params = new URLSearchParams();
+        if (email) params.set('customerEmail', email);
+        if (window.__quoteId) params.set('quoteId', window.__quoteId);
+        const url = params.toString() ? `/api/products?${params.toString()}` : '/api/products';
         
         console.log('Fetching from:', url);
         const resp = await fetch(url, { cache: 'no-store' });
@@ -652,6 +704,7 @@
         return;
       }
 
+      const BLANK_IMAGE = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800"><rect width="800" height="800" fill="%23F7FAFC"/></svg>';
       const html = products.map(product => {
         const imageUrl = product.previewImageUrl || product.baseImageUrl || '';
         const basePrice = product.currentPrice || (product.pricing && product.pricing[0] ? product.pricing[0].price : 0);
@@ -677,6 +730,13 @@
               <div class="product-sku">${product.sku || ''}</div>
               <div class="product-desc">${product.description || ''}</div>
               
+              <div class="design-version-row" style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+                <label style="font-size:12px;color:var(--muted);">Design Version</label>
+                <select class="design-select" data-id="${product.id}" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;">
+                  <option value="">Default</option>
+                </select>
+              </div>
+              
               ${pricingTiersHtml ? `
                 <div class="pricing-tiers">
                   ${pricingTiersHtml}
@@ -692,7 +752,7 @@
               <div id="price-${product.id}" class="product-price">Starting at $${basePrice.toFixed(2)}</div>
               <div id="savings-${product.id}" class="savings-badge" style="display:none;"></div>
               
-              <button class="btn" style="width: 100%; margin-top: 12px; background: var(--primary); color: white; border-color: var(--primary);" onclick="generateMockup('${product.id}')">
+              <button class="btn" style="width: 100%; margin-top: 12px; background: var(--primary); color: white; border-color: var(--primary);" onclick="generateMockup('${product.id}', this)">
                 🎨 Generate Mockup
               </button>
               
@@ -706,29 +766,92 @@
       
       container.innerHTML = html;
       
-      // Handle image fallback for failed preview images
+      // Helper: cache and fetch legacy preview URLs (email-only, no version)
+      async function getLegacyPreviewUrl(email, productId) {
+        if (!email) return '';
+        try {
+          if (!window.__legacyProductsById) {
+            const list = await fetch(`/api/products?customerEmail=${encodeURIComponent(email)}`, { cache: 'no-store' }).then(r => r.json());
+            const map = {};
+            (Array.isArray(list) ? list : []).forEach(p => { map[p.id] = (p.previewImageUrl || p.baseImageUrl || ''); });
+            window.__legacyProductsById = map;
+          }
+          return window.__legacyProductsById[productId] || '';
+        } catch (_) { return ''; }
+      }
+      
+      // Handle image fallback with robust chain: preview -> legacy -> base -> blank
       setTimeout(() => {
         products.forEach(product => {
-          if (product.previewImageUrl && product.baseImageUrl) {
             const productCard = container.querySelector(`[data-product-id="${product.id}"]`);
             const imageDiv = productCard?.querySelector('.product-image');
-            if (imageDiv) {
-              // Test if preview image loads
-              const testImg = new Image();
-              testImg.onload = () => {
-                // Preview image loaded successfully, keep it
-                console.log('✅ Preview image loaded for', product.name);
-              };
-              testImg.onerror = () => {
-                // Preview image failed, fallback to base image
-                console.log('⚠️ Preview image failed, falling back to base image for', product.name);
-                imageDiv.style.backgroundImage = `url('${product.baseImageUrl}')`;
-              };
-              testImg.src = product.previewImageUrl;
+          if (!imageDiv) return;
+          (async () => {
+            const email = (document.getElementById('customerEmail')?.value || '').trim();
+            const candidates = [];
+            if (product.previewImageUrl) candidates.push(product.previewImageUrl);
+            if (email) {
+              try { const legacy = await getLegacyPreviewUrl(email, product.id); if (legacy) candidates.push(legacy); } catch (_) {}
             }
-          }
+            if (product.baseImageUrl) candidates.push(product.baseImageUrl);
+            candidates.push(BLANK_IMAGE);
+            for (const url of candidates) {
+              const ok = await new Promise(res => { const t = new Image(); t.onload = () => res(true); t.onerror = () => res(false); t.src = url; });
+              if (ok) { imageDiv.style.backgroundImage = `url('${url}')`; return; }
+            }
+          })();
         });
       }, 100);
+
+      // If in version mode and a product lacks preview, seed it with legacy preview proactively
+      (async () => {
+        const email = (document.getElementById('customerEmail')?.value || '').trim();
+        if (!email || !window.__quoteId || !window.__versionId) return;
+        for (const product of products) {
+          if (!product.previewImageUrl) {
+            const productCard = container.querySelector(`[data-product-id="${product.id}"]`);
+            const imageDiv = productCard?.querySelector('.product-image');
+            if (!imageDiv) continue;
+            const legacy = await getLegacyPreviewUrl(email, product.id);
+            if (legacy) imageDiv.style.backgroundImage = `url('${legacy}')`;
+          }
+        }
+      })();
+
+      // Populate per-product version dropdowns
+      const email = (document.getElementById('customerEmail')?.value || '').trim();
+      if (email) {
+        products.forEach(async (product) => {
+          try {
+            const sel = container.querySelector(`.design-select[data-id="${product.id}"]`);
+            if (!sel) return;
+            if (!window.__quoteId) return; // only meaningful with a quoteId
+            const data = await fetch(`/api/quotes/${encodeURIComponent(window.__quoteId)}/products/${encodeURIComponent(product.id)}/versions?email=${encodeURIComponent(email)}`).then(r => r.json());
+            const versions = Array.isArray(data?.versions) ? data.versions : [];
+            sel.innerHTML = '<option value="">Default</option>' + versions.map(v => `<option value="${v}">${v}</option>`).join('');
+            sel.addEventListener('change', async (e) => {
+              const version = e.target.value || '';
+              const card = container.querySelector(`.product-card[data-product-id="${product.id}"]`);
+              const imageDiv = card?.querySelector('.product-image');
+              if (!imageDiv) return;
+              if (version) {
+                try {
+                  const j = await fetch(`/api/quotes/${encodeURIComponent(window.__quoteId)}/versions/${encodeURIComponent(version)}/previews/${encodeURIComponent(product.id)}?email=${encodeURIComponent(email)}`).then(r => r.json());
+                  if (j?.url) imageDiv.style.backgroundImage = `url('${j.url}')`;
+                } catch (err) { console.warn('version preview failed', err); }
+              } else {
+                // Default legacy
+                try {
+                  const list = await fetch(`/api/products?customerEmail=${encodeURIComponent(email)}`).then(r => r.json());
+                  const p = Array.isArray(list) ? list.find(x => x.id === product.id) : null;
+                  if (p?.previewImageUrl) imageDiv.style.backgroundImage = `url('${p.previewImageUrl}')`;
+                  else if (p?.baseImageUrl) imageDiv.style.backgroundImage = `url('${p.baseImageUrl}')`;
+                } catch (err) {}
+              }
+            });
+          } catch (err) { console.warn('populate versions failed', err); }
+        });
+      }
     }
 
     // Load branded mockups
@@ -739,7 +862,18 @@
     }
 
     // Open BBox Modal for positioning
-    function openBBoxModal(productId) {
+    async function getExistingLogoUrl(email) {
+      try {
+        const resp = await fetch(`/api/customer/${encodeURIComponent(email)}/logo`);
+        const j = await resp.json();
+        if (j?.hasLogo && j.logoUrl) return j.logoUrl;
+      } catch (e) { console.warn('logo lookup failed', e); }
+      return '';
+    }
+
+    function openBBoxModal(productId, opts) {
+      const forced = !!(opts && opts.forced);
+      const onDone = (opts && typeof opts.onDone === 'function') ? opts.onDone : null;
       const product = products.find(p => p.id === productId);
       if (!product) {
         showMessage('Product not found', 'error');
@@ -753,22 +887,21 @@
         modal.id = 'bboxModal';
         modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;';
         modal.innerHTML = `
-          <div style="background:#fff; border-radius:12px; padding:16px; max-width:90vw; max-height:90vh;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-              <strong id="bboxTitle">Set Logo Position</strong>
+          <div style="background:linear-gradient(180deg,#fff,#FAFBFC); border-radius:16px; padding:18px; max-width:92vw; max-height:92vh; box-shadow:0 16px 48px rgba(0,0,0,.18);">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+              <strong id="bboxTitle" style="font-size:16px;">Set Logo Position</strong>
               <span style="flex:1"></span>
-              <button id="bboxClose" style="border:none;background:#eee;padding:6px 10px;border-radius:6px;cursor:pointer;">Close</button>
+              <input id="logoFile" type="file" accept="image/*" style="display:none;">
+              <label for="logoFile" id="logoFileBtn" style="background:#fff;border:1px solid #e2e8f0;color:#1A202C;padding:8px 14px;border-radius:10px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;">⬆️ Upload Logo</label>
+              <span id="logoFileName" style="font-size:12px;color:#4A5568;"></span>
+              <button id="bboxApply" style="background:#38A169;color:#fff;border:none;padding:8px 14px;border-radius:10px;cursor:pointer;">Apply Changes</button>
+              <button id="bboxSave"  style="background:#111;color:#fff;border:none;padding:8px 14px;border-radius:10px;cursor:pointer;">Save</button>
+              <button id="bboxClear" style="background:#eee;border:none;padding:8px 12px;border-radius:10px;cursor:pointer;">Clear</button>
+              <button id="bboxClose" style="border:none;background:#eee;padding:8px 12px;border-radius:10px;cursor:pointer;">Close</button>
             </div>
-            <div id="bboxCanvasWrap" style="position:relative; overflow:auto; border:1px solid #eee; border-radius:8px;">
+            <div id="bboxCanvasWrap" style="position:relative; overflow:auto; border:1px solid #eee; border-radius:12px; background: repeating-conic-gradient(#f7fafc 0% 25%, transparent 0% 50%) 50% / 20px 20px;">
               <img id="bboxImg" src="" alt="product" style="max-width:85vw; max-height:70vh; display:block;">
               <canvas id="bboxCanvas" style="position:absolute; left:0; top:0;"></canvas>
-            </div>
-            <div style="display:flex; gap:8px; margin-top:12px; align-items:center;">
-              <label>Area name</label>
-              <input id="bboxAreaName" type="text" value="right_chest" style="padding:6px 8px;border:1px solid #ccc;border-radius:6px;">
-              <span style="flex:1"></span>
-              <button id="bboxClear" style="background:#eee;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;">Clear</button>
-              <button id="bboxSave"  style="background:#111;color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;">Save Position</button>
             </div>
           </div>`;
         document.body.appendChild(modal);
@@ -776,14 +909,32 @@
       
       const imgEl = document.getElementById('bboxImg');
       const canvas = document.getElementById('bboxCanvas');
+      const wrap = document.getElementById('bboxCanvasWrap');
+      let overlayImg = document.getElementById('bboxLogoOverlay');
+      if (!overlayImg) {
+        overlayImg = document.createElement('img');
+        overlayImg.id = 'bboxLogoOverlay';
+        overlayImg.style.position = 'absolute';
+        overlayImg.style.left = '0';
+        overlayImg.style.top = '0';
+        overlayImg.style.pointerEvents = 'none';
+        overlayImg.style.display = 'none';
+        overlayImg.style.objectFit = 'contain';
+        wrap.appendChild(overlayImg);
+      }
       const title = document.getElementById('bboxTitle');
-      const areaInput = document.getElementById('bboxAreaName');
       
       title.textContent = `Set Logo Position — ${product.name}`;
+      // Always start from a blank product image with no overlay/logo
       imgEl.src = product.baseImageUrl;
+      if (overlayImg) { overlayImg.style.display = 'none'; overlayImg.src = ''; }
+      const fileInputInit = document.getElementById('logoFile');
+      if (fileInputInit) { try { fileInputInit.value = ''; } catch(_) {} }
       
       let start = null;
       let rect = null;
+      // Ensure a clean state
+      rect = null;
       
       function resizeCanvas() {
         canvas.width  = imgEl.clientWidth;
@@ -829,9 +980,9 @@
       }
       function onUp() { start = null; }
       
-      function clearBox() { rect = null; draw(); }
+      function clearBox() { rect = null; if (overlayImg) { overlayImg.style.display = 'none'; } draw(); }
       
-      async function saveBox() {
+      async function applyChanges(autoSaveVersionName) {
         if (!rect) { 
           showMessage('Draw a box first by clicking and dragging on the image', 'error'); 
           return; 
@@ -842,26 +993,103 @@
           w: Math.abs(rect.w),
           h: Math.abs(rect.h)
         });
-        const payload = {
-          boxes: [{ name: (areaInput.value || 'right_chest'), x1:n.x1, y1:n.y1, x2:n.x2, y2:n.y2 }]
-        };
-        
+        const email = (document.getElementById('customerEmail')?.value || '').trim();
+
+        // Save bbox to Airtable first (always attempt this, even without email)
+        let saved = false;
         try {
-          const response = await fetch(`/api/products/${encodeURIComponent(product.id)}/boxes`, {
-            method: 'POST',
-            headers: { 'Content-Type':'application/json' },
-            body: JSON.stringify(payload)
+          const resp = await fetch(`/api/products/${encodeURIComponent(product.id)}/boxes`, {
+            method: 'POST', headers: { 'Content-Type':'application/json' },
+            body: JSON.stringify({ boxes: [{ name: 'print_area', x1:n.x1, y1:n.y1, x2:n.x2, y2:n.y2 }] })
           });
-          const result = await response.json();
-          if (!response.ok || !result.ok) {
-            throw new Error(result.error || 'Save failed');
+          const j = await resp.json().catch(() => ({}));
+          if (resp.ok && j?.ok) saved = true;
+        } catch (e) { console.warn('bbox save warning', e); }
+
+        // Resolve logo: use uploaded file if provided, else existing S3 logo
+        let logoUrl = '';
+        const fileInput = document.getElementById('logoFile');
+        const file = fileInput && fileInput.files && fileInput.files[0];
+        if (file) {
+          try {
+            // Use server-side upload to avoid S3 CORS
+            const form = new FormData();
+            form.append('email', email);
+            form.append('logo', file, file.name);
+            const up = await fetch('/api/logo/upload', { method: 'POST', body: form }).then(r => r.json());
+            if (!up?.ok) throw new Error(up?.error || 'Logo upload failed');
+            logoUrl = up.url;
+          } catch (e) {
+            console.warn('logo upload failed, fallback to existing', e);
+            logoUrl = await getExistingLogoUrl(email);
           }
-          showMessage('✅ Logo position saved successfully!', 'success');
-          close();
-        } catch (err) {
-          console.error(err);
-          showMessage('❌ Failed to save position: ' + err.message, 'error');
+        } else {
+          logoUrl = await getExistingLogoUrl(email);
         }
+
+        if (!logoUrl) { showMessage('No logo found. Upload a logo under /logo/ and retry.', 'error'); return; }
+
+        // Auto-run fast preview in modal without persisting
+        if (!autoSaveVersionName) {
+          try {
+            // Position overlay to the drawn rect (client pixels)
+            const boxW = Math.max(1, Math.abs(rect.w));
+            const boxH = Math.max(1, Math.abs(rect.h));
+            const left = Math.min(rect.x, rect.x + rect.w);
+            const top  = Math.min(rect.y, rect.y + rect.h);
+            // Use uploaded file if present, else S3 logo URL
+            const logoSrc = file ? URL.createObjectURL(file) : logoUrl;
+            overlayImg.src = logoSrc;
+            overlayImg.style.left = `${left}px`;
+            overlayImg.style.top = `${top}px`;
+            overlayImg.style.width = `${boxW}px`;
+            overlayImg.style.height = `${boxH}px`;
+            overlayImg.style.display = 'block';
+            showMessage('✅ Preview updated (not saved)', 'success');
+          } catch (e) {
+            console.warn('fast overlay preview failed', e);
+          }
+          return; // no persistence on Apply
+        }
+
+        // If saving a named design, persist version and preview
+        if (autoSaveVersionName) {
+          if (!email) { showMessage('Enter customer email first', 'error'); return; }
+          const quoteId = window.__quoteId || 'QDEFAULT';
+          const versionName = autoSaveVersionName;
+          try {
+            await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/versions`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, versionId: versionName, name: versionName })
+            });
+            const designPayload = { email, logoRef: logoUrl, placement: { name:'print_area', px: { x1:n.x1, y1:n.y1, x2:n.x2, y2:n.y2 } }, name: versionName };
+            await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/versions/${encodeURIComponent(versionName)}/designs/${encodeURIComponent(product.id)}`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(designPayload)
+            });
+            const rRes = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/versions/${encodeURIComponent(versionName)}/previews/${encodeURIComponent(product.id)}/render`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email })
+            });
+            const rj = await rRes.json();
+            if (!rRes.ok || !rj.ok) throw new Error('Preview render failed');
+            // Update only this product: set dropdown to version and set its preview
+            const card = document.querySelector(`.product-card[data-product-id="${product.id}"]`);
+            const imageDiv = card?.querySelector('.product-image');
+            const sel = card?.querySelector('.design-select');
+            if (sel && !Array.from(sel.options).some(o => o.value === versionName)) {
+              const opt = document.createElement('option'); opt.value = versionName; opt.textContent = versionName; sel.appendChild(opt);
+            }
+            if (sel) sel.value = versionName;
+            if (imageDiv && rj.previewUrl) imageDiv.style.backgroundImage = `url('${rj.previewUrl}')`;
+            showMessage('✅ Design saved (dropdown updated)', 'success');
+          } catch (e) { console.error(e); showMessage('❌ Failed to save design: ' + e.message, 'error'); }
+        }
+      }
+
+      async function saveBox() {
+        const versionName = prompt('Name this design version (e.g., V1):', (window.__versionId || 'V1')) || '';
+        if (!versionName) { showMessage('Version name required', 'error'); return; }
+        await applyChanges(versionName);
+        close();
       }
       
       function open() {
@@ -877,7 +1105,25 @@
       
       document.getElementById('bboxClose').onclick = close;
       document.getElementById('bboxClear').onclick = clearBox;
-      document.getElementById('bboxSave').onclick  = saveBox;
+      document.getElementById('bboxSave').onclick  = () => { saveBox().catch(err => { console.error(err); showMessage('Error: ' + err.message, 'error'); }); };
+      document.getElementById('bboxApply').onclick = () => { applyChanges().catch(err => { console.error(err); showMessage('Error: ' + err.message, 'error'); }); };
+      // Show selected filename next to Upload button
+      const fileInputUI = document.getElementById('logoFile');
+      const fileNameUI = document.getElementById('logoFileName');
+      if (fileInputUI) {
+        fileInputUI.addEventListener('change', () => {
+          const name = fileInputUI.files && fileInputUI.files[0] ? fileInputUI.files[0].name : '';
+          if (fileNameUI) fileNameUI.textContent = name ? `Selected: ${name}` : '';
+        });
+      }
+      // Fallback inline handler in case onclick binding is stripped by extensions
+      window.__bboxApply = (vn) => { try { applyChanges(vn); } catch (e) { console.error(e); } };
+      document.getElementById('bboxApply').setAttribute('onclick', 'window.__bboxApply && window.__bboxApply()');
+      if (forced) {
+        // In forced mode, Save button acts like Apply (save boxes + generate mockup) and move to next
+        document.getElementById('bboxSave').textContent = 'Save Position';
+        document.getElementById('bboxSave').onclick = () => { applyChanges().catch(err => { console.error(err); showMessage('Error: ' + err.message, 'error'); }); close(); if (typeof onDone === 'function') onDone(); };
+      }
       imgEl.onload = resizeCanvas;
       window.addEventListener('resize', resizeCanvas);
       
@@ -886,6 +1132,40 @@
       canvas.addEventListener('mouseup',   onUp);
       
       open();
+    }
+
+    async function generateMockup(productId, btnEl) {
+      console.log('Generating mockup for product:', productId);
+      const email = (document.getElementById('customerEmail').value || '').trim();
+      if (!email) { showMessage('Enter a customer email first', 'error'); return; }
+
+      // Let the server choose the default logo for this email.
+      const button = btnEl || document.querySelector(`.product-card[data-product-id="${productId}"] .btn`);
+      const originalText = button ? button.textContent : '';
+      if (button) { button.disabled = true; button.textContent = '⏳ Generating...'; }
+
+      try {
+        showMessage('Generating mockup and uploading to S3...', 'success');
+        const response = await fetch(`/api/products/${encodeURIComponent(productId)}/mockup`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) { throw new Error(result.error || 'Mockup generation failed'); }
+        showMessage('✅ Mockup generated and uploaded to S3!', 'success');
+        // Refresh only this product's image instead of the entire catalog
+        const list = await fetch(`/api/products?customerEmail=${encodeURIComponent(email)}`).then(r => r.json());
+        const updated = Array.isArray(list) ? list.find(p => p.id === productId) : null;
+        if (updated) {
+          const nextUrl = updated.previewImageUrl || updated.baseImageUrl || '';
+          const bust = nextUrl ? `${nextUrl}${nextUrl.includes('?') ? '&' : '?'}cb=${Date.now()}` : nextUrl;
+          await updateProductCardImage(productId, bust, email);
+        }
+      } catch (error) {
+        console.error('Mockup generation error:', error);
+        showMessage(`❌ Mockup generation failed: ${error.message}`, 'error');
+      } finally {
+        if (button) { button.disabled = false; button.textContent = originalText; }
+      }
     }
     function adjustQuantity(productId, delta) {
       const input = document.getElementById(`qty-${productId}`);
@@ -1087,8 +1367,11 @@
           },
           products: quote.map(item => ({ 
             productId: item.productId, 
-            quantity: item.quantity 
+            quantity: item.quantity,
+            versionId: (document.querySelector(`.design-select[data-id="${item.productId}"]`)?.value || '')
           })),
+          quoteId: window.__quoteId || '',
+          versionId: window.__versionId || '',
           shippingAddress: { 
             line1: 'TBD', city: 'TBD', state: 'TBD', 
             postal_code: 'TBD', country: 'US' 
@@ -1122,100 +1405,25 @@
       }
     }
 
-    // Generate mockup for specific product
-    async function generateMockup(productId) {
-      console.log('Generating mockup for product:', productId);
-      
-      let email = document.getElementById('customerEmail').value.trim();
-      let logoUrl = null;
-
-      // If email is provided, try to fetch their logo from S3
-      if (!email) {
-        showMessage('Please enter a customer email first, or we\'ll ask you to upload a logo file.', 'error');
-        // For now, let's still ask for manual logo URL if no email
-        logoUrl = prompt('No email provided. Please enter logo URL:');
-        if (!email) {
-          showMessage('Logo URL is required for mockup generation', 'error');
-          return;
-        }
-      } else {
-        // Try to fetch logo from S3 for this customer
-        try {
-          showMessage('Looking for existing logo in S3...', 'success');
-          const logoResponse = await fetch(`/api/customer/${encodeURIComponent(email)}/logo`);
-          const logoData = await logoResponse.json();
-          
-          if (logoData.hasLogo) {
-            logoUrl = logoData.logoUrl;
-            showMessage(`Found logo: ${logoData.filename}`, 'success');
-          } else {
-            // No logo found, ask for upload or URL
-            const userChoice = confirm(
-              'No logo found in S3 for this customer email.\n\n' +
-              'Click OK to provide a logo URL, or Cancel to upload a file later.'
-            );
-            
-            if (userChoice) {
-              logoUrl = prompt('Please enter logo URL:');
-              if (!logoUrl) {
-                showMessage('Logo URL is required for mockup generation', 'error');
-                return;
-              }
-            } else {
-              showMessage('Please upload a logo file to S3 first, then try again.', 'error');
-              return;
-            }
-          }
-        } catch (error) {
-          console.error('Error fetching logo:', error);
-          showMessage('Could not check for existing logo. Please provide logo URL.', 'error');
-          logoUrl = prompt('Please enter logo URL:');
-          if (!logoUrl) {
-            showMessage('Logo URL is required for mockup generation', 'error');
-            return;
-          }
-        }
+    // Helper to safely update a product card image with fallbacks
+    async function updateProductCardImage(productId, candidateUrl, email) {
+      const card = document.querySelector(`.product-card[data-product-id="${productId}"]`);
+      const imageDiv = card?.querySelector('.product-image');
+      if (!imageDiv) return;
+      const trySet = (url) => { if (url) imageDiv.style.backgroundImage = `url('${url}')`; };
+      // Test candidate first
+      if (candidateUrl) {
+        const test = new Image();
+        const ok = await new Promise((resolve) => { test.onload = () => resolve(true); test.onerror = () => resolve(false); test.src = candidateUrl; });
+        if (ok) { trySet(candidateUrl); return; }
       }
-      
-      // Ensure we have both email and logoUrl at this point
-      if (!email || !logoUrl) {
-        showMessage('Both email and logo are required for mockup generation', 'error');
-        return;
-      }
-      
-      // Find the button to show loading state
-      const button = event.target;
-      const originalText = button.textContent;
-      button.disabled = true;
-      button.textContent = '⏳ Generating...';
-      
+      // Fallback: fetch legacy preview for this product
       try {
-        showMessage('Generating mockup and uploading to S3...', 'success');
-        
-        const response = await fetch(`/api/products/${encodeURIComponent(productId)}/mockup`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, logoUrl })
-        });
-        
-        const result = await response.json();
-        
-        if (!response.ok || !result.ok) {
-          throw new Error(result.error || 'Mockup generation failed');
-        }
-        
-        showMessage(`✅ Mockup generated and uploaded to S3! Refreshing products...`, 'success');
-        
-        // Refresh products to show the new mockup
-        await loadProducts();
-        
-      } catch (error) {
-        console.error('Mockup generation error:', error);
-        showMessage(`❌ Mockup generation failed: ${error.message}`, 'error');
-      } finally {
-        button.disabled = false;
-        button.textContent = originalText;
-      }
+        const list = await fetch(`/api/products?customerEmail=${encodeURIComponent(email || '')}`, { cache: 'no-store' }).then(r => r.json());
+        const p = Array.isArray(list) ? list.find(x => x.id === productId) : null;
+        const url = p?.previewImageUrl || p?.baseImageUrl || '';
+        if (url) trySet(url);
+      } catch (e) { /* ignore */ }
     }
   </script>
 </body>
